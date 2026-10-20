@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>架空名刺 — 名前を入れると、存在しない肩書きが完成。</title>
+<meta name="description" content="名前を入れるだけで、存在しない会社・部署・役職・社訓つきの名刺が完成。PNGで保存してそのまま共有できます。">
+<meta property="og:title" content="架空名刺 — 名前を入れると、存在しない肩書きが完成。">
+<meta property="og:description" content="「株式会社月星商事 睡眠管理部 専務取締役」。名前を入れるだけで、そんな名刺が作れます。PNG保存つき。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/kyokou-meishi/">
+<meta property="og:site_name" content="架空名刺">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="架空名刺 — 名前を入れると、存在しない肩書きが完成。">
+<meta name="twitter:description" content="名前を入れるだけで、存在しない会社・部署・役職・社訓つきの名刺が完成。PNGで保存してそのまま共有できます。">
+<meta name="theme-color" content="#eef1ea">
+<style>
+  :root{
+    --paper:#eef1ea;
+    --card:#fffdf8;
+    --ink:#1b2119;
+    --muted:#6c7166;
+    --accent:#1f5c46;
+    --stamp:#b5342a;
+    --line:rgba(27,33,25,.16);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 500px at -10% 0%, #f7f4e8 0%, transparent 55%),
+      radial-gradient(800px 500px at 110% 10%, #e4ecdf 0%, transparent 50%),
+      var(--paper);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+  }
+  .wrap{max-width:720px;margin:0 auto;padding:24px 18px calc(40px + env(safe-area-inset-bottom))}
+  .brand{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:11px;letter-spacing:.2em;color:var(--muted);text-transform:uppercase}
+  .brand b{color:var(--ink);letter-spacing:.12em}
+  h1{font-size:clamp(1.85rem,7.4vw,2.75rem);line-height:1.12;margin:.45em 0 .2em;letter-spacing:-.02em}
+  h1 em{font-style:normal;color:var(--accent);border-bottom:3px solid var(--accent)}
+  .lead{color:var(--muted);margin:0 0 18px;font-size:14.5px;line-height:1.7}
+  .panel{
+    background:#fff;
+    border:2px solid var(--ink);
+    border-radius:16px;
+    box-shadow:5px 5px 0 var(--ink);
+    padding:14px 16px;
+  }
+  .panel:focus-within{box-shadow:5px 5px 0 var(--accent)}
+  .panel label{display:block;font-size:11px;letter-spacing:.16em;color:var(--muted);font-weight:700;margin-bottom:4px}
+  #name{
+    width:100%;border:0;border-bottom:2px dashed var(--line);
+    background:transparent;padding:4px 0 6px;
+    font:inherit;font-size:clamp(1.3rem,5.4vw,1.6rem);font-weight:800;letter-spacing:.02em;
+    color:var(--ink);outline:none;
+  }
+  #name::placeholder{color:#c3c6bd;font-weight:600}
+  .panel .hint{margin:7px 0 0;font-size:11px;color:var(--muted)}
+
+  .stage{margin-top:22px}
+  .card{
+    position:relative;
+    background:var(--card);
+    border:1.5px solid #d9d3c6;
+    border-radius:10px;
+    box-shadow:0 12px 28px rgba(27,33,25,.12), 0 2px 0 #ded8ca;
+    aspect-ratio:91/55;
+    width:100%;
+    padding:22px;
+    padding:6.2cqw;
+    container-type:inline-size;
+    display:flex;flex-direction:column;
+    overflow:hidden;
+  }
+  .co{font-weight:700;color:#3d443c;font-size:13px;font-size:4.3cqw;line-height:1.3;padding-right:15cqw;letter-spacing:.02em}
+  .rule{height:1px;background:#e4ded2;margin:2.4cqw 0 2.2cqw;flex:none}
+  .role{margin:0;font-size:11px;font-size:3.1cqw;color:#6d7368;line-height:1.35;letter-spacing:.03em}
+  .role .sep{margin:0 .5em;opacity:.55}
+  .person{
+    margin:1.6cqw 0 0;
+    font-size:30px;
+    font-size:calc(clamp(26px,8.4cqw,46px) * var(--ns,1));
+    font-weight:800;letter-spacing:.04em;line-height:1.15;color:#131811;
+    white-space:nowrap;
+  }
+  .motto{margin:auto 0 0;padding-top:2cqw;font-size:9.5px;font-size:clamp(9px,2.7cqw,13px);color:#5d6357;line-height:1.55;letter-spacing:.01em;max-width:78%}
+  .foot{display:flex;justify-content:space-between;align-items:flex-end;gap:3cqw;margin-top:2.6cqw;flex:none}
+  .meta{font-size:8.5px;font-size:clamp(8.5px,2.25cqw,11px);color:#7b8075;letter-spacing:.02em;line-height:1.5}
+  .meta .sep{margin:0 .35em;opacity:.6}
+  .addr{font-size:8.5px;font-size:clamp(8.5px,2.2cqw,11px);color:#8a8f83;margin-top:.5cqw;line-height:1.4}
+  .barcode{display:flex;align-items:flex-end;gap:1.5px;height:5.2cqw;min-height:13px;opacity:.7;flex:none}
+  .barcode i{display:block;background:#363b34;height:100%}
+  .stamp{
+    position:absolute;top:5.4cqw;right:5.8cqw;
+    width:12.5cqw;height:12.5cqw;
+    border:0.55cqw solid var(--stamp);border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    color:var(--stamp);font-weight:800;font-size:6cqw;line-height:1;
+    transform:rotate(-9deg);opacity:.88;letter-spacing:0;
+    user-select:none;
+  }
+  .caption{margin:8px 0 0;font-size:11px;color:var(--muted);text-align:center}
+
+  .actions{margin-top:18px;display:flex;flex-wrap:wrap;gap:9px}
+  .actions button,.actions a{
+    font:inherit;font-size:14px;font-weight:800;letter-spacing:.02em;
+    display:inline-flex;align-items:center;justify-content:center;gap:6px;
+    min-height:48px;padding:12px 16px;border-radius:12px;cursor:pointer;
+    text-decoration:none;
+    transition:transform .1s ease,box-shadow .1s ease,background .15s;
+  }
+  .primary{
+    flex:1 1 100%;
+    color:#fff;background:var(--accent);
+    border:2px solid var(--ink);box-shadow:4px 4px 0 var(--ink);
+  }
+  .primary:hover{background:#194b39}
+  .primary:active{transform:translate(2px,2px);box-shadow:2px 2px 0 var(--ink)}
+  .ghost{
+    flex:1 1 0;min-width:110px;
+    color:var(--ink);background:#fff;
+    border:1.5px solid var(--line);
+  }
+  .ghost:hover{border-color:var(--ink);background:#fbfaf5}
+  .ghost:active{transform:translateY(1px)}
+  .actions button:focus-visible,.actions a:focus-visible,#name:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+  .status{margin:10px 0 0;font-size:12px;color:var(--accent);min-height:1.4em}
+  .footnote{margin-top:18px;font-size:11.5px;color:var(--muted);line-height:1.7}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="brand"><b>架空名刺</b><span>KYOKOU MEISHI</span></div>
+  <h1>その名前、<br><em>肩書き</em>をつけてみる?</h1>
+  <p class="lead">名前を入れるだけで、存在しない会社の名刺が完成。会社名も、部署も、社訓も、全部それっぽく。</p>
+
+  <section class="panel" aria-labelledby="nameLabel">
+    <label id="nameLabel" for="name">なまえ</label>
+    <input id="name" type="text" maxlength="14" autocomplete="off" autocapitalize="off" spellcheck="false"
+           placeholder="山田 太郎" value="山田 太郎" aria-describedby="nameHint">
+    <p class="hint" id="nameHint">同じ名前なら、同じ名刺。作り直したいときは下のボタン。</p>
+  </section>
+
+  <section class="stage" aria-label="生成された名刺">
+    <div class="card" id="card">
+      <div class="stamp" id="stamp" aria-hidden="true">月</div>
+      <div class="co" id="company">株式会社月星商事</div>
+      <div class="rule" aria-hidden="true"></div>
+      <p class="role"><span id="dept">睡眠管理部</span><span class="sep" aria-hidden="true">／</span><span id="title">専務取締役</span></p>
+      <p class="person" id="person">山田 太郎</p>
+      <p class="motto" id="motto">「明日やれることは、今日やらない。」</p>
+      <div class="foot">
+        <div>
+          <div class="meta"><span id="emp">社員番号 4821</span><span class="sep" aria-hidden="true">/</span><span id="joined">入社 2009年4月</span></div>
+          <div class="addr" id="addr">東京都千代田区月見町3-2-1 月星ビル5F</div>
+        </div>
+        <div class="barcode" id="barcode" aria-hidden="true"></div>
+      </div>
+    </div>
+    <p class="caption" id="caption">社訓まで含めて、だいたい架空です。</p>
+  </section>
+
+  <div class="actions">
+    <button type="button" class="primary" id="reroll">別の名刺を作る</button>
+    <button type="button" class="ghost" id="copy">コピー</button>
+    <button type="button" class="ghost" id="png">PNGで保存</button>
+    <a class="ghost" id="tweet" href="#" target="_blank" rel="noopener">Xでシェア</a>
+  </div>
+  <p class="status" id="status" aria-live="polite"></p>
+
+  <p class="footnote">
+    会社名・部署・役職・住所・社員番号はすべて生成された架空のものです。実在する団体とは関係ありません。
+    名刺はPNGで保存できるので、そのままアイコンやプロフィール欄にも。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var PREFIX = ["月", "星", "雲", "森", "海", "風", "夢", "音", "朝", "夜", "白", "黒", "花", "雪", "雷", "虹"];
+  var SUFFIX = ["商事", "製作所", "研究所", "工業", "食品", "出版", "通信", "開発", "サービス", "パートナーズ", "ホールディングス", "不動産"];
+  var DEPTS = ["睡眠管理部", "雑談推進室", "未来企画部", "おやつ開発部", "宇宙事業部", "思い出保管庫", "二度寝研究所", "湯気観測課", "黄昏デザイン部", "まかない課", "定時退社推進室", "ひらめき管理部"];
+  var TITLES = ["専務取締役", "執行役員", "主席研究員", "部長", "課長代理", "相談役", "チーフ・オブ・なにもしない", "主任", "室長", "参与", "フェロー", "代表取締役"];
+  var MOTTOS = [
+    "明日やれることは、今日やらない。",
+    "会議は短く、昼寝は長く。",
+    "迷ったら、おやつ。",
+    "定時は、守るためにある。",
+    "完璧より、完成。",
+    "まず、湯を沸かす。",
+    "急がば、回れ。でも急ぐ。",
+    "今日の自分を、明日の自分が笑う。",
+    "やる気は、あとからついてくる。",
+    "静かに、確実に、少しだけ。",
+    "1日1回は、空を見る。",
+    "資料は薄く、結論は太く。"
+  ];
+  var CITIES = ["東京都千代田区", "東京都渋谷区", "大阪府大阪市北区", "愛知県名古屋市中村区", "福岡県福岡市博多区", "北海道札幌市中央区", "神奈川県横浜市西区", "沖縄県那覇市"];
+  var TOWNS = ["月見町", "雲雀ヶ丘", "梅田", "則武", "博多駅前", "北2条西", "みなとみらい", "久茂地"];
+  var BUILDS = ["月星ビル5F", "第2森ビル3F", "共同ビル8F", "レジデンス2F", ""];
+  var URL = "https://rinderdragon0823.github.io/site-factory/kyokou-meishi/";
+
+  var input = document.getElementById("name");
+  var card = document.getElementById("card");
+  var el = {
+    company: document.getElementById("company"),
+    dept: document.getElementById("dept"),
+    title: document.getElementById("title"),
+    person: document.getElementById("person"),
+    motto: document.getElementById("motto"),
+    emp: document.getElementById("emp"),
+    joined: document.getElementById("joined"),
+    addr: document.getElementById("addr"),
+    stamp: document.getElementById("stamp"),
+    barcode: document.getElementById("barcode")
+  };
+  var status = document.getElementById("status");
+  var tweet = document.getElementById("tweet");
+  var roll = 0;
+  var current = null;
+
+  function hash(str) {
+    var h = 2166136261;
+    for (var i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  }
+
+  function mulberry32(a) {
+    return function () {
+      a |= 0;
+      a = (a + 0x6D2B79F5) | 0;
+      var t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function pick(arr, rnd) {
+    return arr[Math.floor(rnd() * arr.length) % arr.length];
+  }
+
+  function pad(n, len) {
+    var s = String(n);
+    while (s.length < len) s = "0" + s;
+    return s;
+  }
+
+  function buildData(name) {
+    var rnd = mulberry32(hash(name + "|" + roll));
+    var pre = pick(PREFIX, rnd);
+    var suf = pick(SUFFIX, rnd);
+    var company = "株式会社" + pre + suf;
+    var dept = pick(DEPTS, rnd);
+    var title = pick(TITLES, rnd);
+    var motto = pick(MOTTOS, rnd);
+    var city = pick(CITIES, rnd);
+    var town = pick(TOWNS, rnd);
+    var build = pick(BUILDS, rnd);
+    var emp = pad(1 + Math.floor(rnd() * 9000), 4);
+    var year = 2001 + Math.floor(rnd() * 23);
+    var month = 1 + Math.floor(rnd() * 12);
+    var addr = city + town + (1 + Math.floor(rnd() * 6)) + "-" + (1 + Math.floor(rnd() * 20)) + "-" + (1 + Math.floor(rnd() * 12)) + (build ? " " + build : "");
+    var bars = [];
+    for (var i = 0; i < 18; i++) bars.push(1 + Math.floor(rnd() * 4));
+    return {
+      name: name,
+      company: company,
+      stamp: pre,
+      dept: dept,
+      title: title,
+      motto: "「" + motto + "」",
+      emp: emp,
+      year: year,
+      month: month,
+      addr: addr,
+      bars: bars
+    };
+  }
+
+  function normalizeName(raw) {
+    var v = String(raw).replace(/[\r\n\t]/g, " ").replace(/\s+/g, " ").trim();
+    if (!v) v = "名無しの権兵衛";
+    return v;
+  }
+
+  function render() {
+    var name = normalizeName(input.value);
+    if (input.value !== name && document.activeElement !== input) input.value = name;
+    var d = buildData(name);
+    current = d;
+
+    el.company.textContent = d.company;
+    el.stamp.textContent = d.stamp;
+    el.dept.textContent = d.dept;
+    el.title.textContent = d.title;
+    el.person.textContent = d.name;
+    el.motto.textContent = d.motto;
+    el.emp.textContent = "社員番号 " + d.emp;
+    el.joined.textContent = "入社 " + d.year + "年" + d.month + "月";
+    el.addr.textContent = d.addr;
+
+    var len = Array.from(d.name).length;
+    var ns = len <= 8 ? 1 : Math.max(0.62, 8 / len);
+    card.style.setProperty("--ns", ns.toFixed(3));
+
+    var frag = document.createDocumentFragment();
+    d.bars.forEach(function (w) {
+      var b = document.createElement("i");
+      b.style.width = (w * 0.9) + "px";
+      b.style.width = (w * 0.24) + "cqw";
+      frag.appendChild(b);
+    });
+    el.barcode.textContent = "";
+    el.barcode.appendChild(frag);
+
+    tweet.href = "https://twitter.com/intent/tweet?text=" + encodeURIComponent(tweetText(d)) + "&url=" + encodeURIComponent(URL);
+  }
+
+  function tweetText(d) {
+    return "【架空名刺】" + d.company + " " + d.dept + " " + d.title + " " + d.name + "。社訓は" + d.motto + "。あなたの名前でも作れます。";
+  }
+
+  function copyText(text) {
+    return new Promise(function (resolve) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () { resolve(true); }, function () { resolve(fallbackCopy(text)); });
+      } else {
+        resolve(fallbackCopy(text));
+      }
+    });
+  }
+
+  function fallbackCopy(text) {
+    try {
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.top = "-1000px";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok;
+    } catch (e) { return false; }
+  }
+
+  function flash(msg) {
+    status.textContent = msg;
+    window.clearTimeout(flash.t);
+    flash.t = window.setTimeout(function () { status.textContent = ""; }, 1800);
+  }
+
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function wrap(ctx, text, x, y, maxWidth, lineHeight) {
+    var chars = Array.from(text);
+    var line = "";
+    var cy = y;
+    for (var i = 0; i < chars.length; i++) {
+      var test = line + chars[i];
+      if (ctx.measureText(test).width > maxWidth && line) {
+        ctx.fillText(line, x, cy);
+        line = chars[i];
+        cy += lineHeight;
+      } else {
+        line = test;
+      }
+    }
+    if (line) ctx.fillText(line, x, cy);
+  }
+
+  function savePng() {
+    if (!current) return;
+    var d = current;
+    var W = 1050, H = 635;
+    var c = document.createElement("canvas");
+    c.width = W;
+    c.height = H;
+    var ctx = c.getContext("2d");
+    if (!ctx) { flash("PNG出力に対応していません"); return; }
+
+    var sans = '"Hiragino Sans","Yu Gothic","Noto Sans JP",system-ui,sans-serif';
+
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = "#fffdf8";
+    roundRect(ctx, 6, 6, W - 12, H - 12, 14);
+    ctx.fill();
+    ctx.strokeStyle = "#e2dccd";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.textBaseline = "alphabetic";
+    ctx.fillStyle = "#3d443c";
+    ctx.font = "700 26px " + sans;
+    ctx.fillText(d.company, 64, 86);
+
+    ctx.fillStyle = "#b5342a";
+    ctx.beginPath();
+    ctx.arc(930, 112, 58, 0, Math.PI * 2);
+    ctx.strokeStyle = "#b5342a";
+    ctx.lineWidth = 5;
+    ctx.stroke();
+    ctx.font = "800 54px " + sans;
+    ctx.textAlign = "center";
+    ctx.fillText(d.stamp, 930, 132);
+    ctx.textAlign = "left";
+
+    ctx.strokeStyle = "#e4ded2";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(64, 116);
+    ctx.lineTo(986, 116);
+    ctx.stroke();
+
+    ctx.fillStyle = "#6d7368";
+    ctx.font = "500 22px " + sans;
+    ctx.fillText(d.dept + "　／　" + d.title, 64, 162);
+
+    ctx.fillStyle = "#131811";
+    var nameSize = Math.min(92, Math.floor(800 / Math.max(1, Array.from(d.name).length)));
+    ctx.font = "800 " + nameSize + "px " + sans;
+    ctx.fillText(d.name, 64, 286);
+
+    ctx.fillStyle = "#5d6357";
+    ctx.font = "400 22px " + sans;
+    wrap(ctx, d.motto, 64, 452, 680, 34);
+
+    ctx.fillStyle = "#7b8075";
+    ctx.font = "400 17px " + sans;
+    ctx.fillText("社員番号 " + d.emp + "　／　入社 " + d.year + "年" + d.month + "月", 64, 556);
+    ctx.fillStyle = "#8a8f83";
+    ctx.font = "400 16px " + sans;
+    ctx.fillText(d.addr, 64, 590);
+
+    var x = 812;
+    ctx.fillStyle = "#363b34";
+    d.bars.forEach(function (w) {
+      var bw = w * 2;
+      ctx.fillRect(x, 496, bw, 48);
+      x += bw + 5;
+    });
+
+    var done = function (blob) {
+      if (!blob) { flash("PNGを作れませんでした"); return; }
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "kyokou-meishi.png";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+      flash("名刺をPNGで保存しました");
+    };
+
+    if (c.toBlob) c.toBlob(done, "image/png");
+    else flash("PNG出力に対応していません");
+  }
+
+  input.addEventListener("input", function (e) {
+    if (e.isComposing) return;
+    render();
+  });
+  input.addEventListener("compositionend", render);
+  input.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      roll++;
+      render();
+      flash("新しい名刺を作りました");
+    }
+  });
+
+  document.getElementById("reroll").addEventListener("click", function () {
+    roll++;
+    render();
+    flash("新しい名刺を作りました");
+  });
+
+  document.getElementById("copy").addEventListener("click", function () {
+    var d = current;
+    if (!d) return;
+    var text = "【架空名刺】\n" + d.company + "\n" + d.dept + " " + d.title + "\n" + d.name + "\n社訓 " + d.motto + "\n" + URL;
+    copyText(text).then(function (ok) {
+      flash(ok ? "コピーしました" : "コピーできませんでした");
+    });
+  });
+
+  document.getElementById("png").addEventListener("click", savePng);
+
+  render();
+})();
+</script>
+</body>
+</html>
