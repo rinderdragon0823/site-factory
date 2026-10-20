@@ -13,9 +13,16 @@
   h1 { font-size: 28px; margin: 0 0 8px; letter-spacing: -0.02em; }
   header p { margin: 0; color: #9aa3b2; }
   main { max-width: 880px; margin: 0 auto; display: grid; gap: 12px; }
-  .card { display: block; padding: 18px 20px; border: 1px solid #23262f; border-radius: 14px;
+  .card { display: flex; gap: 16px; align-items: flex-start; padding: 18px 20px; border: 1px solid #23262f; border-radius: 14px;
           background: #12141a; color: inherit; text-decoration: none; transition: .15s; }
   .card:hover { border-color: #4b5566; transform: translateY(-1px); }
+  .body { flex: 1 1 auto; min-width: 0; }
+  .thumb { flex: none; width: 132px; height: 168px; object-fit: cover; object-position: top center;
+           border-radius: 10px; border: 1px solid #262a33; background: #000; }
+  @media (max-width: 560px) {
+    .card { flex-direction: column-reverse; }
+    .thumb { width: 100%; height: 200px; }
+  }
   .row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
   h2 { font-size: 17px; margin: 0; }
   time { color: #7d8698; font-size: 12px; white-space: nowrap; }
@@ -33,36 +40,63 @@
   </header>
   <main>
       <a class="card" href="./tatoe-zan/">
-        <div class="row"><h2>たとえ算</h2><time>2026-10-20</time></div>
-        <p>金額を入れるだけで、うまい棒・牛丼・映画・新幹線に変換。出費が少しだけ愛しくなる計算機。</p>
-        <div class="meta"><span class="tag">tool</span><code>/tatoe-zan/</code></div>
+        <div class="body">
+          <div class="row"><h2>たとえ算</h2><time>2026-10-20</time></div>
+          <p>金額を入れるだけで、うまい棒・牛丼・映画・新幹線に変換。出費が少しだけ愛しくなる計算機。</p>
+          <div class="meta"><span class="tag">tool</span><code>/tatoe-zan/</code></div>
+        </div>
+        <video class="thumb" src="./tatoe-zan/demo.mp4" poster="./tatoe-zan/demo-poster.jpg" muted loop playsinline preload="metadata"></video>
       </a>
       <a class="card" href="./renda-duel/">
-        <div class="row"><h2>連打ダービー</h2><time>2026-10-20</time></div>
-        <p>画面を半分こして5秒連打対決。勝敗と1秒あたりの回数を採点、CPU戦もあり。</p>
-        <div class="meta"><span class="tag">game</span><code>/renda-duel/</code></div>
+        <div class="body">
+          <div class="row"><h2>連打ダービー</h2><time>2026-10-20</time></div>
+          <p>画面を半分こして5秒連打対決。勝敗と1秒あたりの回数を採点、CPU戦もあり。</p>
+          <div class="meta"><span class="tag">game</span><code>/renda-duel/</code></div>
+        </div>
+        <video class="thumb" src="./renda-duel/demo.mp4" poster="./renda-duel/demo-poster.jpg" muted loop playsinline preload="metadata"></video>
       </a>
       <a class="card" href="./kyokou-meishi/">
-        <div class="row"><h2>架空名刺</h2><time>2026-10-20</time></div>
-        <p>名前を入れるだけで、存在しない会社・部署・役職・社訓つきの名刺が完成。PNG保存でそのまま共有。</p>
-        <div class="meta"><span class="tag">tool</span><code>/kyokou-meishi/</code></div>
+        <div class="body">
+          <div class="row"><h2>架空名刺</h2><time>2026-10-20</time></div>
+          <p>名前を入れるだけで、存在しない会社・部署・役職・社訓つきの名刺が完成。PNG保存でそのまま共有。</p>
+          <div class="meta"><span class="tag">tool</span><code>/kyokou-meishi/</code></div>
+        </div>
+        <video class="thumb" src="./kyokou-meishi/demo.mp4" poster="./kyokou-meishi/demo-poster.jpg" muted loop playsinline preload="metadata"></video>
       </a>
       <a class="card" href="./just-3s/">
-        <div class="row"><h2>3秒ジャスト</h2><time>2026-10-20</time></div>
-        <p>3.00秒ぴったりで止めて、体内時計のズレをミリ秒で採点。</p>
-        <div class="meta"><span class="tag">game</span><code>/just-3s/</code></div>
+        <div class="body">
+          <div class="row"><h2>3秒ジャスト</h2><time>2026-10-20</time></div>
+          <p>3.00秒ぴったりで止めて、体内時計のズレをミリ秒で採点。</p>
+          <div class="meta"><span class="tag">game</span><code>/just-3s/</code></div>
+        </div>
+        <video class="thumb" src="./just-3s/demo.mp4" poster="./just-3s/demo-poster.jpg" muted loop playsinline preload="metadata"></video>
       </a>
       <a class="card" href="./iiwake-maker/">
-        <div class="row"><h2>言い訳メーカー</h2><time>2026-10-20</time></div>
-        <p>状況を選ぶだけで、それっぽい言い訳と説得力スコアが出る自白装置。</p>
-        <div class="meta"><span class="tag">tool</span><code>/iiwake-maker/</code></div>
+        <div class="body">
+          <div class="row"><h2>言い訳メーカー</h2><time>2026-10-20</time></div>
+          <p>状況を選ぶだけで、それっぽい言い訳と説得力スコアが出る自白装置。</p>
+          <div class="meta"><span class="tag">tool</span><code>/iiwake-maker/</code></div>
+        </div>
+        <video class="thumb" src="./iiwake-maker/demo.mp4" poster="./iiwake-maker/demo-poster.jpg" muted loop playsinline preload="metadata"></video>
       </a>
       <a class="card" href="./dotchi-ha/">
-        <div class="row"><h2>どっち派?</h2><time>2026-10-20</time></div>
-        <p>10個の二択に答えるだけ。最後に、あなたの「派」が10個ならぶ好みの記録。</p>
-        <div class="meta"><span class="tag">tool</span><code>/dotchi-ha/</code></div>
+        <div class="body">
+          <div class="row"><h2>どっち派?</h2><time>2026-10-20</time></div>
+          <p>10個の二択に答えるだけ。最後に、あなたの「派」が10個ならぶ好みの記録。</p>
+          <div class="meta"><span class="tag">tool</span><code>/dotchi-ha/</code></div>
+        </div>
+        <video class="thumb" src="./dotchi-ha/demo.mp4" poster="./dotchi-ha/demo-poster.jpg" muted loop playsinline preload="metadata"></video>
       </a>
   </main>
   <footer>単一HTMLファイル / 外部依存なし / スマホ対応</footer>
+  <script>
+    document.querySelectorAll('.card').forEach(card => {
+      const v = card.querySelector('video');
+      if (!v) return;
+      card.addEventListener('mouseenter', () => { v.play().catch(() => {}); });
+      card.addEventListener('mouseleave', () => { v.pause(); try { v.currentTime = 0; } catch {} });
+      card.addEventListener('touchstart', () => { v.play().catch(() => {}); }, { passive: true });
+    });
+  </script>
 </body>
 </html>

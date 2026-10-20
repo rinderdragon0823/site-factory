@@ -5,42 +5,193 @@
       "title": "3秒ジャスト",
       "pitch": "3.00秒ぴったりで止めて、体内時計のズレをミリ秒で採点。",
       "kind": "game",
-      "date": "2026-10-20"
+      "date": "2026-10-20",
+      "demo": {
+        "steps": [
+          {
+            "wait": 2300
+          },
+          {
+            "clickNth": 0,
+            "after": 1400
+          }
+        ]
+      }
     },
     {
       "slug": "iiwake-maker",
       "title": "言い訳メーカー",
       "pitch": "状況を選ぶだけで、それっぽい言い訳と説得力スコアが出る自白装置。",
       "kind": "tool",
-      "date": "2026-10-20"
+      "date": "2026-10-20",
+      "demo": {
+        "steps": [
+          {
+            "clickNth": 0,
+            "after": 700
+          },
+          {
+            "clickNth": 5,
+            "after": 1600
+          }
+        ]
+      }
     },
     {
       "slug": "tatoe-zan",
       "title": "たとえ算",
       "pitch": "金額を入れるだけで、うまい棒・牛丼・映画・新幹線に変換。出費が少しだけ愛しくなる計算機。",
       "kind": "tool",
-      "date": "2026-10-20"
+      "date": "2026-10-20",
+      "demo": {
+        "steps": [
+          {
+            "fill": "10000"
+          },
+          {
+            "wait": 400
+          },
+          {
+            "clickNth": 3,
+            "after": 1500
+          }
+        ]
+      }
     },
     {
       "slug": "kyokou-meishi",
       "title": "架空名刺",
       "pitch": "名前を入れるだけで、存在しない会社・部署・役職・社訓つきの名刺が完成。PNG保存でそのまま共有。",
       "kind": "tool",
-      "date": "2026-10-20"
+      "date": "2026-10-20",
+      "demo": {
+        "steps": [
+          {
+            "fill": "山田 太郎"
+          },
+          {
+            "wait": 300
+          },
+          {
+            "clickNth": 0,
+            "after": 1500
+          }
+        ]
+      }
     },
     {
       "slug": "renda-duel",
       "title": "連打ダービー",
       "pitch": "画面を半分こして5秒連打対決。勝敗と1秒あたりの回数を採点、CPU戦もあり。",
       "kind": "game",
-      "date": "2026-10-20"
+      "date": "2026-10-20",
+      "demo": {
+        "steps": [
+          {
+            "clickNth": 0,
+            "after": 900
+          },
+          {
+            "clickNth": 2,
+            "after": 1200
+          },
+          {
+            "clickPoint": {
+              "x": 300,
+              "y": 700
+            },
+            "after": 150
+          },
+          {
+            "clickPoint": {
+              "x": 600,
+              "y": 700
+            },
+            "after": 150
+          },
+          {
+            "clickPoint": {
+              "x": 300,
+              "y": 700
+            },
+            "after": 150
+          },
+          {
+            "clickPoint": {
+              "x": 600,
+              "y": 700
+            },
+            "after": 150
+          },
+          {
+            "clickPoint": {
+              "x": 300,
+              "y": 700
+            },
+            "after": 150
+          },
+          {
+            "clickPoint": {
+              "x": 600,
+              "y": 700
+            },
+            "after": 150
+          },
+          {
+            "clickPoint": {
+              "x": 300,
+              "y": 700
+            },
+            "after": 150
+          },
+          {
+            "clickPoint": {
+              "x": 600,
+              "y": 700
+            },
+            "after": 150
+          }
+        ]
+      }
     },
     {
       "slug": "dotchi-ha",
       "title": "どっち派?",
       "pitch": "10個の二択に答えるだけ。最後に、あなたの「派」が10個ならぶ好みの記録。",
       "kind": "tool",
-      "date": "2026-10-20"
+      "date": "2026-10-20",
+      "demo": {
+        "steps": [
+          {
+            "clickNth": 0,
+            "after": 450
+          },
+          {
+            "clickNth": 1,
+            "after": 450
+          },
+          {
+            "clickNth": 0,
+            "after": 450
+          },
+          {
+            "clickNth": 1,
+            "after": 450
+          },
+          {
+            "clickNth": 0,
+            "after": 450
+          },
+          {
+            "clickNth": 1,
+            "after": 450
+          },
+          {
+            "clickNth": 0,
+            "after": 900
+          }
+        ]
+      }
     }
   ]
 }
