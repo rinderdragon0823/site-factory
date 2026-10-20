@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>どっち派? — 10個の二択で、自分の好みが並ぶ。</title>
+<meta name="description" content="朝型か夜型か、犬派か猫派か。10個の二択に答えるだけで、あなたの好みが10個のタグになって並びます。">
+<meta property="og:title" content="どっち派? — 10個の二択で、自分の好みが並ぶ。">
+<meta property="og:description" content="10個の二択に答えるだけ。最後に、あなたの「派」が10個ならびます。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/dotchi-ha/">
+<meta property="og:site_name" content="どっち派?">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#fdf6ec">
+<style>
+  :root{
+    --paper:#fdf6ec;
+    --ink:#241f1a;
+    --muted:#7c7264;
+    --accent:#c8462b;
+    --green:#2a6f4e;
+    --line:rgba(36,31,26,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 480px at 100% -5%, #ffe9d2 0%, transparent 55%),
+      radial-gradient(760px 460px at -10% 100%, #e8f0e3 0%, transparent 50%),
+      var(--paper);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+  }
+  .wrap{max-width:560px;margin:0 auto;padding:24px 20px calc(40px + env(safe-area-inset-bottom))}
+  .brand{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:11px;letter-spacing:.2em;color:var(--muted);text-transform:uppercase}
+  .brand b{color:var(--ink);letter-spacing:.12em;font-size:13px}
+  .track{height:5px;border-radius:99px;background:rgba(36,31,26,.1);margin:18px 0 6px;overflow:hidden}
+  .track i{display:block;height:100%;width:0;background:var(--green);border-radius:99px;transition:width .25s ease}
+  .step{margin:0;font-size:11px;letter-spacing:.12em;color:var(--muted);font-variant-numeric:tabular-nums}
+
+  .quiz{margin-top:26px}
+  .q{font-size:clamp(1.5rem,6.2vw,2rem);line-height:1.35;margin:0 0 20px;letter-spacing:-.015em;font-weight:800;min-height:2.7em}
+  .q .num{display:block;font-size:11px;letter-spacing:.16em;color:var(--accent);font-weight:700;margin-bottom:8px}
+  .opts{display:flex;flex-direction:column;gap:10px}
+  .opt{
+    display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+    font:inherit;font-size:clamp(1rem,4.2vw,1.15rem);font-weight:700;color:var(--ink);
+    background:#fffdf9;border:2px solid var(--ink);border-radius:16px;
+    padding:16px 16px;min-height:64px;cursor:pointer;
+    box-shadow:4px 4px 0 rgba(36,31,26,.16);
+    transition:transform .1s ease,box-shadow .1s ease,background .15s;
+  }
+  .opt .badge{
+    flex:none;width:30px;height:30px;border-radius:9px;
+    display:flex;align-items:center;justify-content:center;
+    font-size:12px;font-weight:800;letter-spacing:.06em;
+    background:rgba(36,31,26,.08);color:var(--muted);
+  }
+  .opt:hover{background:#fff;transform:translate(-1px,-1px);box-shadow:5px 5px 0 rgba(36,31,26,.2)}
+  .opt:active{transform:translate(2px,2px);box-shadow:1px 1px 0 rgba(36,31,26,.16)}
+  .opt:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+  .opt:hover .badge{background:var(--green);color:#fff}
+  .back{
+    margin-top:18px;font:inherit;font-size:12.5px;color:var(--muted);
+    background:none;border:0;padding:8px 0;cursor:pointer;text-decoration:underline;text-underline-offset:3px;
+  }
+  .back:hover{color:var(--ink)}
+  .back:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .quiz.in{animation:slide .22s ease}
+  @keyframes slide{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+  .result{margin-top:26px}
+  .result h1{font-size:clamp(1.6rem,6.4vw,2.1rem);line-height:1.4;margin:0 0 6px;letter-spacing:-.02em}
+  .result h1 span{color:var(--green)}
+  .result .sub{margin:0 0 16px;color:var(--muted);font-size:13px;line-height:1.7}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 20px;padding:0;list-style:none}
+  .chips li{
+    font-size:13px;font-weight:700;
+    background:#fffdf9;border:1.5px solid var(--line);border-radius:999px;
+    padding:8px 13px;
+  }
+  .chips li b{color:var(--accent);font-weight:800;margin-right:6px;font-size:11px}
+  .actions{display:flex;flex-wrap:wrap;gap:9px}
+  .actions button,.actions a{
+    flex:1 1 40%;min-height:48px;
+    display:inline-flex;align-items:center;justify-content:center;
+    font:inherit;font-size:14px;font-weight:800;text-decoration:none;
+    border-radius:12px;padding:12px 14px;cursor:pointer;
+    transition:transform .1s,background .15s;
+  }
+  .again{flex:1 1 100%!important;background:var(--green);color:#fff;border:2px solid var(--ink);box-shadow:4px 4px 0 var(--ink)}
+  .again:hover{background:#235c41}
+  .again:active{transform:translate(2px,2px);box-shadow:2px 2px 0 var(--ink)}
+  .ghost{background:#fffdf9;color:var(--ink);border:1.5px solid var(--line)}
+  .ghost:hover{border-color:var(--ink)}
+  .actions button:focus-visible,.actions a:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+  .feedback{margin:12px 0 0;font-size:12px;color:var(--green);min-height:1.4em}
+  .note{margin-top:22px;font-size:11.5px;color:var(--muted);line-height:1.7}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="brand"><b>どっち派?</b><span>10 QUICK CHOICES</span></div>
+
+  <div class="track" aria-hidden="true"><i id="bar"></i></div>
+  <p class="step" id="step">1 / 10</p>
+
+  <section class="quiz" id="quiz" aria-labelledby="qText">
+    <h1 class="q" id="qText"><span class="num">QUESTION 01</span>朝ごはん、どっち?</h1>
+    <div class="opts">
+      <button type="button" class="opt" id="optA" data-side="0">
+        <span class="badge" aria-hidden="true">A</span><span id="labelA">しっかり食べる</span>
+      </button>
+      <button type="button" class="opt" id="optB" data-side="1">
+        <span class="badge" aria-hidden="true">B</span><span id="labelB">ギリギリまで寝る</span>
+      </button>
+    </div>
+    <button type="button" class="back" id="back" hidden>← ひとつ戻る</button>
+    <p class="feedback" id="feedback" aria-live="polite"></p>
+  </section>
+
+  <section class="result" id="result" hidden>
+    <h1 id="resHead">あなたは、<span id="resTypes">朝型・犬派・甘党</span>。</h1>
+    <p class="sub">10個の二択から、好みだけを並べました。診断でも採点でもありません。</p>
+    <ul class="chips" id="chips"></ul>
+    <div class="actions">
+      <button type="button" class="again" id="again">もう一回（別の10問）</button>
+      <button type="button" class="ghost" id="copy">結果をコピー</button>
+      <a class="ghost" id="tweet" href="#" target="_blank" rel="noopener">Xでシェア</a>
+    </div>
+    <p class="feedback" id="note" aria-live="polite"></p>
+  </section>
+
+  <p class="note">
+    キーボードでも遊べます：<b>1 / ←</b> でA、<b>2 / →</b> でB、<b>Backspace</b> でひとつ戻る。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var POOL = [
+    { q: "朝ごはん、どっち?", a: ["しっかり食べる", "朝型"], b: ["ギリギリまで寝る", "夜型"] },
+    { q: "コーヒー、どっち?", a: ["ブラック", "苦味派"], b: ["ミルクたっぷり", "甘党"] },
+    { q: "休日、どっち?", a: ["家でのんびり", "インドア"], b: ["外に出かける", "アウトドア"] },
+    { q: "犬か猫か、どっち?", a: ["犬", "犬派"], b: ["猫", "猫派"] },
+    { q: "旅行、どっち?", a: ["計画を立てる", "計画派"], b: ["行き当たりばったり", "即興派"] },
+    { q: "主食、どっち?", a: ["ごはん", "米派"], b: ["パン", "パン派"] },
+    { q: "映画、どっち?", a: ["映画館で見る", "映画館派"], b: ["家で配信", "おうち派"] },
+    { q: "買い物、どっち?", a: ["現物を見て買う", "実物派"], b: ["ネットで買う", "ネット派"] },
+    { q: "麺、どっち?", a: ["そば", "そば派"], b: ["うどん", "うどん派"] },
+    { q: "季節、どっち?", a: ["夏", "夏派"], b: ["冬", "冬派"] },
+    { q: "連絡、どっち?", a: ["電話", "電話派"], b: ["メッセージ", "文字派"] },
+    { q: "電車の席、どっち?", a: ["窓側", "窓側派"], b: ["通路側", "通路側派"] },
+    { q: "味、どっち?", a: ["甘いもの", "甘党"], b: ["辛いもの", "辛党"] },
+    { q: "朝の支度、どっち?", a: ["前夜に決める", "前夜派"], b: ["朝決める", "朝決め派"] },
+    { q: "写真、どっち?", a: ["撮る側", "撮る派"], b: ["撮られる側", "撮られる派"] },
+    { q: "カラオケ、どっち?", a: ["歌う", "歌う派"], b: ["聴く", "聴く派"] },
+    { q: "寿司、どっち?", a: ["サーモン", "サーモン派"], b: ["マグロ", "マグロ派"] },
+    { q: "待ち合わせ、どっち?", a: ["5分前に着く", "早め派"], b: ["ちょうどに着く", "ジャスト派"] },
+    { q: "掃除、どっち?", a: ["こまめにやる", "こまめ派"], b: ["まとめてやる", "まとめて派"] },
+    { q: "デザート、どっち?", a: ["別腹", "別腹派"], b: ["もう入らない", "遠慮派"] },
+    { q: "本、どっち?", a: ["紙", "紙派"], b: ["電子", "電子派"] },
+    { q: "知らない道、どっち?", a: ["地図を見る", "地図派"], b: ["勘で行く", "勘派"] },
+    { q: "会話、どっち?", a: ["聞き役", "聞き役"], b: ["話し役", "話し役"] },
+    { q: "休憩、どっち?", a: ["散歩", "散歩派"], b: ["昼寝", "昼寝派"] },
+    { q: "映画のジャンル、どっち?", a: ["ホラー", "ホラー派"], b: ["ラブコメ", "ラブコメ派"] },
+    { q: "トイレットペーパー、どっち?", a: ["シングル", "シングル派"], b: ["ダブル", "ダブル派"] },
+    { q: "目玉焼き、どっち?", a: ["醤油", "醤油派"], b: ["ソース", "ソース派"] },
+    { q: "旅行先、どっち?", a: ["海", "海派"], b: ["山", "山派"] },
+    { q: "予定、どっち?", a: ["詰める", "詰める派"], b: ["空ける", "空ける派"] },
+    { q: "お風呂、どっち?", a: ["湯船につかる", "湯船派"], b: ["シャワーで済ます", "シャワー派"] }
+  ];
+
+  var URL = "https://rinderdragon0823.github.io/site-factory/dotchi-ha/";
+  var TOTAL = 10;
+
+  var quiz = document.getElementById("quiz");
+  var result = document.getElementById("result");
+  var qText = document.getElementById("qText");
+  var labelA = document.getElementById("labelA");
+  var labelB = document.getElementById("labelB");
+  var step = document.getElementById("step");
+  var bar = document.getElementById("bar");
+  var back = document.getElementById("back");
+  var feedback = document.getElementById("feedback");
+  var chips = document.getElementById("chips");
+  var resHead = document.getElementById("resTypes");
+  var note = document.getElementById("note");
+  var tweet = document.getElementById("tweet");
+
+  var items = [];
+  var answers = [];
+  var idx = 0;
+  var state = "quiz";
+
+  function shuffle(list) {
+    var a = list.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+
+  function newRound() {
+    var pool = shuffle(POOL);
+    var seen = {};
+    items = [];
+    for (var i = 0; i < pool.length && items.length < TOTAL; i++) {
+      var aTag = pool[i].a[1];
+      var bTag = pool[i].b[1];
+      if (seen[aTag] || seen[bTag]) continue;
+      seen[aTag] = true;
+      seen[bTag] = true;
+      items.push(pool[i]);
+    }
+    answers = new Array(items.length).fill(-1);
+    idx = 0;
+    state = "quiz";
+    result.hidden = true;
+    quiz.hidden = false;
+    feedback.textContent = "";
+    note.textContent = "";
+    paint();
+  }
+
+  function paint() {
+    var item = items[idx];
+    qText.innerHTML = '<span class="num">QUESTION ' + String(idx + 1).padStart(2, "0") + '</span>' + item.q;
+    labelA.textContent = item.a[0];
+    labelB.textContent = item.b[0];
+    step.textContent = (idx + 1) + " / " + items.length;
+    bar.style.width = ((idx / items.length) * 100).toFixed(1) + "%";
+    back.hidden = idx === 0;
+    feedback.textContent = "";
+
+    if (!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches)) {
+      quiz.classList.remove("in");
+      void quiz.offsetWidth;
+      quiz.classList.add("in");
+    }
+  }
+
+  function choose(side) {
+    if (state !== "quiz") return;
+    answers[idx] = side;
+    if (idx === items.length - 1) {
+      showResult();
+      return;
+    }
+    idx++;
+    paint();
+  }
+
+  function showResult() {
+    state = "result";
+    quiz.hidden = true;
+    result.hidden = false;
+    bar.style.width = "100%";
+    step.textContent = items.length + " / " + items.length;
+
+    var tags = answers.map(function (side, i) {
+      return side === 0 ? items[i].a[1] : items[i].b[1];
+    });
+
+    resHead.textContent = tags.slice(0, 3).join("・");
+
+    chips.textContent = "";
+    answers.forEach(function (side, i) {
+      var item = items[i];
+      var choice = side === 0 ? item.a : item.b;
+      var li = document.createElement("li");
+      var q = document.createElement("b");
+      q.textContent = String(i + 1);
+      li.appendChild(q);
+      li.appendChild(document.createTextNode(choice[0] + "（" + choice[1] + "）"));
+      chips.appendChild(li);
+    });
+
+    note.textContent = "";
+    var shareText = "【どっち派?】" + tags.slice(0, 3).join("・") + " でした。10個の二択で、好みが並びます。";
+    tweet.href = "https://twitter.com/intent/tweet?text=" + encodeURIComponent(shareText) + "&url=" + encodeURIComponent(URL);
+
+    document.getElementById("again").focus({ preventScroll: true });
+  }
+
+  function goBack() {
+    if (state !== "quiz" || idx === 0) return;
+    idx--;
+    answers[idx] = -1;
+    paint();
+  }
+
+  document.getElementById("optA").addEventListener("click", function () { choose(0); });
+  document.getElementById("optB").addEventListener("click", function () { choose(1); });
+  back.addEventListener("click", goBack);
+  document.getElementById("again").addEventListener("click", newRound);
+
+  document.getElementById("copy").addEventListener("click", function () {
+    var lines = ["【どっち派?】"];
+    answers.forEach(function (side, i) {
+      var it = items[i];
+      var ch = side === 0 ? it.a : it.b;
+      lines.push(it.q.replace(/、どっち\?$/, "") + " → " + ch[0]);
+    });
+    lines.push(URL);
+    copyText(lines.join("\n")).then(function (ok) {
+      note.textContent = ok ? "コピーしました。" : "コピーできませんでした。";
+    });
+  });
+
+  function copyText(text) {
+    return new Promise(function (resolve) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () { resolve(true); }, function () { resolve(fallbackCopy(text)); });
+      } else {
+        resolve(fallbackCopy(text));
+      }
+    });
+  }
+
+  function fallbackCopy(text) {
+    try {
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.top = "-1000px";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok;
+    } catch (e) { return false; }
+  }
+
+  document.addEventListener("keydown", function (e) {
+    var tag = (e.target && e.target.tagName) || "";
+    if (tag === "BUTTON" || tag === "A") {
+      if (e.key === " " || e.key === "Enter") return;
+    }
+    if (state === "quiz") {
+      if (e.key === "1" || e.key === "ArrowLeft") { e.preventDefault(); choose(0); return; }
+      if (e.key === "2" || e.key === "ArrowRight") { e.preventDefault(); choose(1); return; }
+      if (e.key === "Backspace") { e.preventDefault(); goBack(); return; }
+    } else if (state === "result") {
+      if (e.key === " " || e.key === "Enter") { e.preventDefault(); newRound(); }
+    }
+  });
+
+  newRound();
+})();
+</script>
+</body>
+</html>
