@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>昼ルーレット — 今日の昼ごはん、0.5秒で決める。</title>
+<meta name="description" content="10個の候補から、物理演算のルーレットで今日の昼ごはんを決定。迷う時間を、ゼロに。">
+<meta property="og:title" content="昼ルーレット — 今日の昼ごはん、0.5秒で決める。">
+<meta property="og:description" content="カレー、ラーメン、寿司、そば。ルーレットが止まったものが、今日の昼ごはんです。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/hiru-roulette/">
+<meta property="og:site_name" content="昼ルーレット">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#fff8ee">
+<style>
+  :root{
+    --paper:#fff8ee;
+    --ink:#241f1a;
+    --muted:#867a6a;
+    --accent:#e4572e;
+    --line:rgba(36,31,26,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 480px at 100% -10%, #ffe6cf 0%, transparent 60%),
+      radial-gradient(700px 420px at -10% 110%, #e9f1e2 0%, transparent 55%),
+      var(--paper);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+  }
+  .wrap{max-width:600px;margin:0 auto;padding:20px 18px calc(28px + env(safe-area-inset-bottom))}
+  .kicker{margin:0;font-size:10.5px;letter-spacing:.26em;color:var(--accent);font-weight:800}
+  h1{margin:.28em 0 .1em;font-size:clamp(1.9rem,7.6vw,2.6rem);letter-spacing:-.03em;line-height:1.05}
+  .lead{margin:0;color:var(--muted);font-size:13.5px;line-height:1.6}
+  header{padding:4px 2px 12px}
+
+  .wheelwrap{
+    position:relative;
+    width:min(100%,520px);
+    aspect-ratio:1;
+    margin:6px auto 0;
+    filter:drop-shadow(0 14px 26px rgba(36,31,26,.16));
+  }
+  #wheel{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .pointer{
+    position:absolute;left:50%;top:-4px;
+    width:0;height:0;margin-left:-13px;
+    border-left:13px solid transparent;
+    border-right:13px solid transparent;
+    border-top:30px solid var(--ink);
+    filter:drop-shadow(0 2px 0 rgba(255,248,238,.9));
+    z-index:3;
+  }
+  .pointer::after{
+    content:"";position:absolute;left:-9px;top:-16px;
+    width:18px;height:18px;border-radius:50%;
+    background:var(--ink);
+  }
+  .confetti{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:4}
+  .confetti i{
+    position:absolute;top:-14px;width:8px;height:14px;border-radius:2px;
+    animation:fall linear forwards;
+  }
+  @keyframes fall{
+    from{transform:translateY(-20px) rotate(0deg);opacity:1}
+    to{transform:translateY(115vh) rotate(620deg);opacity:.85}
+  }
+
+  .spin{
+    display:block;width:min(100%,520px);margin:14px auto 0;
+    font:inherit;font-size:17px;font-weight:900;letter-spacing:.05em;
+    color:#fff;background:var(--accent);
+    border:2px solid var(--ink);border-radius:15px;
+    padding:15px;min-height:56px;cursor:pointer;
+    box-shadow:5px 5px 0 var(--ink);
+    transition:transform .08s,box-shadow .08s,background .15s;
+  }
+  .spin:hover{background:#d34a24}
+  .spin:active{transform:translate(3px,3px);box-shadow:2px 2px 0 var(--ink)}
+  .spin:disabled{background:#c9a596;cursor:default;box-shadow:5px 5px 0 rgba(36,31,26,.4);transform:none}
+  .spin:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+  .status{margin:10px 0 0;text-align:center;font-size:12px;color:var(--muted);min-height:1.3em}
+
+  .slot{min-height:172px;margin-top:6px}
+  .result{
+    background:#fffdf8;border:2px solid var(--ink);border-radius:18px;
+    padding:16px 18px 14px;margin-top:6px;
+    box-shadow:4px 4px 0 rgba(36,31,26,.14);
+  }
+  .rlabel{margin:0;font-size:10.5px;letter-spacing:.22em;color:var(--accent);font-weight:800}
+  .rname{margin:2px 0 0;font-size:clamp(2rem,8vw,2.6rem);font-weight:900;letter-spacing:-.03em;line-height:1.1}
+  .rline{margin:4px 0 0;font-size:13px;color:var(--muted);line-height:1.6}
+  .ractions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+  .ractions button,.ractions a{
+    flex:1 1 30%;min-height:44px;
+    display:inline-flex;align-items:center;justify-content:center;
+    font:inherit;font-size:12.5px;font-weight:800;text-decoration:none;
+    color:var(--ink);background:#fff;
+    border:1.5px solid var(--line);border-radius:11px;
+    padding:10px 8px;cursor:pointer;
+    transition:border-color .15s,background .15s;
+  }
+  .ractions button:hover,.ractions a:hover{border-color:var(--ink);background:#fffaf2}
+  .ractions button:focus-visible,.ractions a:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+  .feedback{min-height:1.3em;margin:8px 0 0;font-size:11.5px;color:var(--accent)}
+  .foot{margin-top:14px;font-size:11px;color:var(--muted);line-height:1.7}
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none!important;transition:none!important}
+  }
+  @media (max-height:760px){
+    .wheelwrap{width:min(100%,380px)}
+    .slot{min-height:150px}
+  }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <p class="kicker">LUNCH ROULETTE</p>
+    <h1>昼ルーレット</h1>
+    <p class="lead">今日の昼ごはん、0.5秒で決める。あとは、ルーレットに任せて。</p>
+  </header>
+
+  <div class="wheelwrap" id="wheelwrap">
+    <canvas id="wheel" role="img" aria-label="昼ごはんの候補10個が並んだルーレット"></canvas>
+    <div class="pointer" aria-hidden="true"></div>
+    <div class="confetti" id="confetti" aria-hidden="true"></div>
+  </div>
+
+  <button type="button" class="spin" id="spin">まわす</button>
+  <p class="status" id="status" aria-live="polite">ボタンを押すと、止まります。</p>
+
+  <div class="slot">
+    <section class="result" id="result" hidden aria-live="polite">
+      <p class="rlabel">今日の昼は</p>
+      <p class="rname" id="rname">カレー</p>
+      <p class="rline" id="rline">迷う時間は、終わり。</p>
+      <div class="ractions">
+        <button type="button" id="copy">結果をコピー</button>
+        <a id="tweet" href="#" target="_blank" rel="noopener">Xでシェア</a>
+        <button type="button" id="again">もう一回</button>
+      </div>
+      <p class="feedback" id="feedback" aria-live="polite"></p>
+    </section>
+  </div>
+
+  <p class="foot">Spaceキーでも回せます。候補は10個、全部だいたい同じ確率です。</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var ITEMS = [
+    { name: "カレー", line: "迷う時間は、終わり。", color: "#e4572e" },
+    { name: "ラーメン", line: "スープまで飲んでいい日。", color: "#f2b134" },
+    { name: "牛丼", line: "並でいい。並で十分。", color: "#2a9d8f" },
+    { name: "寿司", line: "今日の自分に、少しだけご褒美。", color: "#3d6fb4" },
+    { name: "そば", line: "午後も、するっといこう。", color: "#d1495b" },
+    { name: "パスタ", line: "おしゃれは、昼に置いていく。", color: "#7b5ea7" },
+    { name: "定食", line: "野菜を食べた。えらい。", color: "#4f9d69" },
+    { name: "うどん", line: "胃に、やさしい選択。", color: "#e08a2e" },
+    { name: "コンビニ", line: "選択肢の多さに、負けない。", color: "#2f8fa3" },
+    { name: "自炊", line: "冷蔵庫と、相談しよう。", color: "#b56576" }
+  ];
+  var URL = "https://rinderdragon0823.github.io/site-factory/hiru-roulette/";
+  var TAU = Math.PI * 2;
+  var N = ITEMS.length;
+  var SEG = TAU / N;
+
+  var canvas = document.getElementById("wheel");
+  var wrap = document.getElementById("wheelwrap");
+  var ctx = canvas.getContext("2d");
+  var confetti = document.getElementById("confetti");
+  var spinBtn = document.getElementById("spin");
+  var status = document.getElementById("status");
+  var result = document.getElementById("result");
+  var rname = document.getElementById("rname");
+  var rline = document.getElementById("rline");
+  var feedback = document.getElementById("feedback");
+  var tweet = document.getElementById("tweet");
+  var again = document.getElementById("again");
+  var copyBtn = document.getElementById("copy");
+
+  var size = 400;
+  var R = 180;
+  var dpr = 1;
+  var rot = -Math.PI / 3;
+  var v = 0;
+  var last = 0;
+  var raf = 0;
+  var state = "idle";
+  var reduce = false;
+  var lastPick = null;
+
+  try { reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) { reduce = false; }
+
+  function textColor(hex) {
+    var r = parseInt(hex.slice(1, 3), 16);
+    var g = parseInt(hex.slice(3, 5), 16);
+    var b = parseInt(hex.slice(5, 7), 16);
+    var l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    return l > 148 ? "#241f1a" : "#fffdf7";
+  }
+
+  function draw() {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, size, size);
+    ctx.save();
+    ctx.translate(size / 2, size / 2);
+    ctx.save();
+    ctx.rotate(rot);
+
+    for (var i = 0; i < N; i++) {
+      var a0 = i * SEG;
+      var a1 = a0 + SEG;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.arc(0, 0, R, a0, a1);
+      ctx.closePath();
+      ctx.fillStyle = ITEMS[i].color;
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "rgba(255,248,238,.5)";
+      ctx.stroke();
+
+      ctx.save();
+      ctx.rotate(a0 + SEG / 2);
+      ctx.fillStyle = textColor(ITEMS[i].color);
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+      ctx.font = "800 " + Math.round(R * 0.098) + 'px "Hiragino Sans","Yu Gothic UI","Noto Sans JP",system-ui,sans-serif';
+      ctx.fillText(ITEMS[i].name, R - Math.max(14, R * 0.07), 0);
+      ctx.restore();
+    }
+    ctx.restore();
+
+    ctx.beginPath();
+    ctx.arc(0, 0, R * 0.2, 0, TAU);
+    ctx.fillStyle = "#fffdf7";
+    ctx.fill();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "#241f1a";
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(0, 0, R * 0.055, 0, TAU);
+    ctx.fillStyle = "#241f1a";
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(0, 0, R, 0, TAU);
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = "#241f1a";
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function resize() {
+    var rect = wrap.getBoundingClientRect();
+    size = Math.max(220, Math.round(rect.width));
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = Math.round(size * dpr);
+    canvas.height = Math.round(size * dpr);
+    R = size / 2 - 12;
+    draw();
+  }
+
+  function winnerIndex() {
+    var local = (-Math.PI / 2 - rot) % TAU;
+    if (local < 0) local += TAU;
+    return Math.floor(local / SEG) % N;
+  }
+
+  function startSpin() {
+    if (state !== "idle") return;
+    state = "spinning";
+    spinBtn.disabled = true;
+    result.hidden = true;
+    feedback.textContent = "";
+    confetti.textContent = "";
+    status.textContent = "まわしています…";
+    rot = rot % TAU;
+    v = reduce ? 7 : 13 + Math.random() * 5;
+    last = performance.now();
+    raf = requestAnimationFrame(tick);
+  }
+
+  function tick(now) {
+    var dt = Math.min(0.045, Math.max(0, (now - last) / 1000));
+    last = now;
+    rot += v * dt;
+    v -= (reduce ? 9 : 3.6) * dt;
+    if (v <= 0.3) {
+      snap(winnerIndex());
+      return;
+    }
+    draw();
+    raf = requestAnimationFrame(tick);
+  }
+
+  function snap(index) {
+    var target = -Math.PI / 2 - (index + 0.5) * SEG;
+    var k = Math.ceil((rot - target) / TAU);
+    target += k * TAU;
+    if (target <= rot) target += TAU;
+
+    var from = rot;
+    var delta = target - rot;
+    var t0 = performance.now();
+    var dur = reduce ? 120 : 460;
+
+    function anim(now) {
+      var p = Math.min(1, (now - t0) / dur);
+      var e = 1 - Math.pow(1 - p, 3);
+      rot = from + delta * e;
+      draw();
+      if (p < 1) {
+        requestAnimationFrame(anim);
+      } else {
+        finish(index);
+      }
+    }
+    requestAnimationFrame(anim);
+  }
+
+  function finish(index) {
+    var item = ITEMS[index];
+    state = "idle";
+    spinBtn.disabled = false;
+    spinBtn.textContent = "もう一回まわす";
+    lastPick = item;
+    rname.textContent = item.name;
+    rline.textContent = item.line;
+    result.hidden = false;
+    status.textContent = item.name + " に決まりました。";
+    tweet.href = "https://twitter.com/intent/tweet?text=" + encodeURIComponent(
+      "【昼ルーレット】今日の昼は「" + item.name + "」。" + item.line
+    ) + "&url=" + encodeURIComponent(URL);
+    if (!reduce) burst();
+  }
+
+  function burst() {
+    var colors = ["#e4572e", "#f2b134", "#2a9d8f", "#3d6fb4", "#d1495b", "#7b5ea7"];
+    var frag = document.createDocumentFragment();
+    for (var i = 0; i < 26; i++) {
+      var p = document.createElement("i");
+      p.style.left = (4 + Math.random() * 92).toFixed(1) + "%";
+      p.style.background = colors[i % colors.length];
+      p.style.animationDuration = (1.5 + Math.random() * 0.9).toFixed(2) + "s";
+      p.style.animationDelay = (Math.random() * 0.25).toFixed(2) + "s";
+      p.style.transform = "rotate(" + Math.round(Math.random() * 180) + "deg)";
+      frag.appendChild(p);
+    }
+    confetti.textContent = "";
+    confetti.appendChild(frag);
+    window.setTimeout(function () { confetti.textContent = ""; }, 2800);
+  }
+
+  spinBtn.addEventListener("click", startSpin);
+  again.addEventListener("click", startSpin);
+
+  copyBtn.addEventListener("click", function () {
+    if (!lastPick) return;
+    var text = "【昼ルーレット】今日の昼は「" + lastPick.name + "」。" + lastPick.line + "\n" + URL;
+    copyText(text).then(function (ok) {
+      feedback.textContent = ok ? "コピーしました。" : "コピーできませんでした。";
+    });
+  });
+
+  function copyText(text) {
+    return new Promise(function (resolve) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () { resolve(true); }, function () { resolve(fallbackCopy(text)); });
+      } else {
+        resolve(fallbackCopy(text));
+      }
+    });
+  }
+
+  function fallbackCopy(text) {
+    try {
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.top = "-1000px";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok;
+    } catch (e) { return false; }
+  }
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== " " && e.key !== "Enter") return;
+    var tag = (e.target && e.target.tagName) || "";
+    if (tag === "BUTTON" || tag === "A") return;
+    e.preventDefault();
+    startSpin();
+  });
+
+  if (window.ResizeObserver) {
+    new ResizeObserver(resize).observe(wrap);
+  } else {
+    window.addEventListener("resize", resize);
+  }
+
+  resize();
+})();
+</script>
+</body>
+</html>
