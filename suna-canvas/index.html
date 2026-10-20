@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>砂のキャンバス — 描いて、崩す。</title>
+<meta name="description" content="指で砂を描いて、「崩す」を押すと一気に落下。砂の絵がほどけていくのを眺めるだけの砂時計。">
+<meta property="og:title" content="砂のキャンバス — 描いて、崩す。">
+<meta property="og:description" content="指で砂を描いて、「崩す」を押すだけ。砂の絵が、さらさらと崩れていきます。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/suna-canvas/">
+<meta property="og:site_name" content="砂のキャンバス">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#f7f2e7">
+<style>
+  :root{
+    --paper:#f7f2e7;
+    --ink:#241d16;
+    --muted:#8a7c69;
+    --accent:#b4532a;
+    --line:rgba(36,29,22,.16);
+    --sand:#e9bd78;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 500px at 100% -10%, #ffe9cf 0%, transparent 60%),
+      radial-gradient(700px 420px at -10% 110%, #efe6d3 0%, transparent 55%),
+      var(--paper);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+  }
+  .wrap{max-width:600px;margin:0 auto;padding:22px 18px calc(32px + env(safe-area-inset-bottom))}
+  .kicker{margin:0;font-size:10.5px;letter-spacing:.26em;color:var(--accent);font-weight:800}
+  h1{margin:.3em 0 .12em;font-size:clamp(1.9rem,7.4vw,2.5rem);letter-spacing:-.03em;line-height:1.06}
+  .lead{margin:0 0 14px;color:var(--muted);font-size:13.5px;line-height:1.65}
+  header{padding:0 2px}
+
+  .board{position:relative}
+  #sand{
+    display:block;width:100%;aspect-ratio:1/1;
+    background:#191510;
+    border:2px solid var(--ink);border-radius:16px;
+    box-shadow:0 12px 28px rgba(36,29,22,.18);
+    image-rendering:pixelated;
+    touch-action:none;
+    cursor:crosshair;
+    -webkit-user-select:none;user-select:none;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .count{
+    position:absolute;right:12px;bottom:12px;
+    font-size:11px;font-weight:700;letter-spacing:.06em;
+    color:#f4e7d2;background:rgba(25,21,16,.58);
+    border:1px solid rgba(244,231,210,.24);
+    border-radius:999px;padding:5px 10px;
+    font-variant-numeric:tabular-nums;
+    pointer-events:none;
+  }
+  .stamps{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+  .stamps button{
+    flex:1 1 0;min-width:96px;
+    font:inherit;font-size:12.5px;font-weight:800;
+    color:var(--ink);background:#fffdf8;
+    border:1.5px solid var(--line);border-radius:11px;
+    padding:10px 6px;min-height:44px;cursor:pointer;
+    transition:border-color .15s,background .15s,transform .08s;
+  }
+  .stamps button:hover{border-color:var(--ink);background:#fffaf0}
+  .stamps button:active{transform:translateY(1px)}
+  .stamps button:focus-visible,.controls button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+  .controls{display:flex;gap:9px;margin-top:10px;flex-wrap:wrap}
+  .controls button{
+    font:inherit;font-size:14px;font-weight:900;letter-spacing:.03em;
+    border-radius:12px;cursor:pointer;min-height:50px;padding:12px 14px;
+    transition:transform .08s,box-shadow .08s,background .15s;
+  }
+  .run{
+    flex:1 1 100%;
+    color:#fff;background:var(--accent);
+    border:2px solid var(--ink);box-shadow:4px 4px 0 var(--ink);
+  }
+  .run:hover{background:#9c451f}
+  .run:active{transform:translate(2px,2px);box-shadow:2px 2px 0 var(--ink)}
+  .run[aria-pressed="true"]{background:var(--ink);color:#f7f2e7}
+  .ghost{
+    flex:1 1 0;
+    color:var(--ink);background:#fffdf8;
+    border:1.5px solid var(--line);
+  }
+  .ghost:hover{border-color:var(--ink)}
+  .ghost[aria-pressed="true"]{background:var(--ink);color:#f7f2e7;border-color:var(--ink)}
+  .hint{margin:12px 0 0;font-size:11.5px;color:var(--muted);line-height:1.7}
+  .hint b{color:var(--ink)}
+
+  .tip{margin-top:16px;padding:12px 14px;border-left:3px solid var(--sand);background:rgba(233,189,120,.14);border-radius:0 10px 10px 0;font-size:12px;color:#6e6253;line-height:1.7}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <p class="kicker">SAND CANVAS</p>
+    <h1>砂のキャンバス</h1>
+    <p class="lead">指で砂を描いて、「崩す」を押す。それだけで、さらさらと崩れていきます。</p>
+  </header>
+
+  <div class="board">
+    <canvas id="sand" width="180" height="180" role="img" aria-label="砂を描いて崩せるキャンバス"></canvas>
+    <div class="count" id="count">砂 0 粒</div>
+  </div>
+
+  <div class="stamps" role="group" aria-label="砂の形を置く">
+    <button type="button" id="stHeart">ハートを置く</button>
+    <button type="button" id="stWave">波を置く</button>
+    <button type="button" id="stTower">塔を置く</button>
+  </div>
+
+  <div class="controls">
+    <button type="button" class="run" id="run" aria-pressed="false">崩す</button>
+    <button type="button" class="ghost" id="pour" aria-pressed="false">砂を注ぐ</button>
+    <button type="button" class="ghost" id="erase" aria-pressed="false">けす</button>
+    <button type="button" class="ghost" id="reset">リセット</button>
+  </div>
+
+  <p class="hint">
+    描いている間は止まっています。<b>崩す</b>を押すと重力がはたらき、砂が下へ流れます。
+    <b>砂を注ぐ</b>で、上から砂が降り続けます。
+  </p>
+
+  <p class="tip">コツ：上のほうに大きく描くほど、崩れる時間が長く続きます。ハートは少しだけ、くずれにくい。</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 180, H = 180;
+  var canvas = document.getElementById("sand");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var countEl = document.getElementById("count");
+  var runBtn = document.getElementById("run");
+  var pourBtn = document.getElementById("pour");
+  var eraseBtn = document.getElementById("erase");
+
+  var grid = new Uint8Array(W * H);
+  var tone = new Uint8Array(W * H);
+  var img = ctx.createImageData(W, H);
+
+  var SAND = [
+    [242, 207, 139],
+    [238, 194, 122],
+    [230, 181, 106],
+    [247, 219, 166],
+    [223, 169, 95]
+  ];
+  var BG = [25, 21, 16];
+
+  var running = false;
+  var pouring = false;
+  var erasing = false;
+  var dragging = false;
+  var count = 0;
+  var rafId = 0;
+
+  function setCell(x, y) {
+    if (x < 0 || y < 0 || x >= W || y >= H) return false;
+    var i = y * W + x;
+    if (grid[i] === 1) return false;
+    grid[i] = 1;
+    tone[i] = (Math.random() * SAND.length) | 0;
+    return true;
+  }
+
+  function clearCell(x, y) {
+    if (x < 0 || y < 0 || x >= W || y >= H) return;
+    var i = y * W + x;
+    if (grid[i] === 1) { grid[i] = 0; tone[i] = 0; }
+  }
+
+  function paintDot(x, y, r) {
+    for (var dy = -r; dy <= r; dy++) {
+      for (var dx = -r; dx <= r; dx++) {
+        if (dx * dx + dy * dy > r * r) continue;
+        if (erasing) clearCell(x + dx, y + dy);
+        else setCell(x + dx, y + dy);
+      }
+    }
+  }
+
+  function stampHeart() {
+    var cx = W / 2;
+    var cy = H * 0.44;
+    var s = W * 0.30;
+    for (var y = 0; y < H; y++) {
+      for (var x = 0; x < W; x++) {
+        var nx = (x - cx) / s;
+        var ny = (cy - y) / s;
+        var q = nx * nx + ny * ny - 1;
+        if (q * q * q - nx * nx * ny * ny * ny <= 0) setCell(x, y);
+      }
+    }
+    draw();
+  }
+
+  function stampWave() {
+    var cx = W / 2;
+    var cy = H * 0.46;
+    for (var x = 6; x < W - 6; x++) {
+      var y = Math.round(cy + Math.sin((x - cx) / W * Math.PI * 4.5) * H * 0.075);
+      for (var dy = -2; dy <= 2; dy++) setCell(x, y + dy);
+    }
+    draw();
+  }
+
+  function stampTower() {
+    var cx = W / 2;
+    var top = H * 0.30;
+    var base = H * 0.86;
+    for (var y = Math.round(top); y <= base; y++) {
+      var t = (y - top) / (base - top);
+      var half = Math.round(2 + t * W * 0.20);
+      for (var x = cx - half; x <= cx + half; x++) setCell(x, y);
+    }
+    draw();
+  }
+
+  function step() {
+    var flip = Math.random() < 0.5;
+    for (var y = H - 2; y >= 0; y--) {
+      var rowStart = y * W;
+      for (var k = 0; k < W; k++) {
+        var x = flip ? k : (W - 1 - k);
+        var i = rowStart + x;
+        if (grid[i] !== 1) continue;
+        var below = i + W;
+        if (grid[below] === 0) { move(i, below); continue; }
+        var left = x > 0 ? below - 1 : -1;
+        var right = x < W - 1 ? below + 1 : -1;
+        var first = Math.random() < 0.5 ? left : right;
+        var second = first === left ? right : left;
+        if (first >= 0 && grid[first] === 0) { move(i, first); continue; }
+        if (second >= 0 && grid[second] === 0) { move(i, second); }
+      }
+    }
+  }
+
+  function move(from, to) {
+    grid[to] = 1;
+    tone[to] = tone[from];
+    grid[from] = 0;
+    tone[from] = 0;
+  }
+
+  function draw() {
+    var data = img.data;
+    var n = 0;
+    for (var i = 0; i < W * H; i++) {
+      var o = i * 4;
+      if (grid[i] === 1) {
+        var c = SAND[tone[i]];
+        data[o] = c[0];
+        data[o + 1] = c[1];
+        data[o + 2] = c[2];
+        n++;
+      } else {
+        data[o] = BG[0];
+        data[o + 1] = BG[1];
+        data[o + 2] = BG[2];
+      }
+      data[o + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+    if (n !== count) {
+      count = n;
+      countEl.textContent = "砂 " + n.toLocaleString("ja-JP") + " 粒";
+    }
+  }
+
+  function pour() {
+    for (var k = 0; k < 4; k++) {
+      var x = Math.round(W / 2 + (Math.random() - 0.5) * 18);
+      var y = (Math.random() * 3) | 0;
+      if (x >= 0 && x < W) setCell(x, y);
+    }
+  }
+
+  function loop() {
+    if (running) {
+      if (pouring) pour();
+      step();
+      draw();
+    }
+    rafId = requestAnimationFrame(loop);
+  }
+
+  function setRunning(next) {
+    running = next;
+    runBtn.textContent = running ? "止める" : "崩す";
+    runBtn.setAttribute("aria-pressed", running ? "true" : "false");
+    if (running) draw();
+  }
+
+  runBtn.addEventListener("click", function () { setRunning(!running); });
+
+  pourBtn.addEventListener("click", function () {
+    pouring = !pouring;
+    pourBtn.setAttribute("aria-pressed", pouring ? "true" : "false");
+    pourBtn.textContent = pouring ? "注ぐのを止める" : "砂を注ぐ";
+    if (pouring && !running) setRunning(true);
+  });
+
+  eraseBtn.addEventListener("click", function () {
+    erasing = !erasing;
+    eraseBtn.setAttribute("aria-pressed", erasing ? "true" : "false");
+    eraseBtn.textContent = erasing ? "けす（オン）" : "けす";
+    canvas.style.cursor = erasing ? "cell" : "crosshair";
+  });
+
+  document.getElementById("reset").addEventListener("click", function () {
+    grid.fill(0);
+    tone.fill(0);
+    draw();
+  });
+
+  document.getElementById("stHeart").addEventListener("click", stampHeart);
+  document.getElementById("stWave").addEventListener("click", stampWave);
+  document.getElementById("stTower").addEventListener("click", stampTower);
+
+  function toGrid(e) {
+    var rect = canvas.getBoundingClientRect();
+    return {
+      x: Math.floor((e.clientX - rect.left) / rect.width * W),
+      y: Math.floor((e.clientY - rect.top) / rect.height * H)
+    };
+  }
+
+  canvas.addEventListener("pointerdown", function (e) {
+    e.preventDefault();
+    dragging = true;
+    if (canvas.setPointerCapture) {
+      try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+    }
+    var p = toGrid(e);
+    paintDot(p.x, p.y, 2);
+    draw();
+  });
+
+  canvas.addEventListener("pointermove", function (e) {
+    if (!dragging) return;
+    e.preventDefault();
+    var p = toGrid(e);
+    paintDot(p.x, p.y, 2);
+    draw();
+  });
+
+  function endDrag() { dragging = false; }
+  canvas.addEventListener("pointerup", endDrag);
+  canvas.addEventListener("pointercancel", endDrag);
+  canvas.addEventListener("pointerleave", endDrag);
+  canvas.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+
+  draw();
+  loop();
+})();
+</script>
+</body>
+</html>
