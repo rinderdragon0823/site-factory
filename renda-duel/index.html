@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>連打ダービー — 5秒で、何回押せる?</title>
+<meta name="description" content="画面を半分こして5秒間の連打対決。ひとりならCPUと勝負。1秒あたりの回数まで採点します。">
+<meta property="og:title" content="連打ダービー — 5秒で、何回押せる?">
+<meta property="og:description" content="画面を半分こして5秒間の連打対決。勝敗と1秒あたりの回数が出ます。CPU戦あり。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/renda-duel/">
+<meta property="og:site_name" content="連打ダービー">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#0e1116">
+<style>
+  :root{
+    --bg:#0e1116;
+    --p1:#ff5a3c;
+    --p2:#3b82f6;
+    --lime:#d9ff5a;
+    --ink:#0e1116;
+    --white:#f7f7f2;
+    --muted:rgba(247,247,242,.62);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--bg);color:var(--white);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    overflow:hidden;
+    overscroll-behavior:none;
+  }
+  .app{
+    height:100dvh;
+    display:flex;flex-direction:column;
+    padding:calc(8px + env(safe-area-inset-top)) 0 calc(8px + env(safe-area-inset-bottom));
+  }
+  .hud{
+    flex:none;display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:0 16px 6px;
+  }
+  .title{font-size:13px;font-weight:800;letter-spacing:.14em;line-height:1.2}
+  .title span{display:block;font-size:9px;font-weight:600;letter-spacing:.24em;color:var(--muted);margin-top:2px}
+  .timer{
+    display:flex;align-items:center;gap:8px;
+    font-variant-numeric:tabular-nums;
+  }
+  .timer .clock{font-size:15px;font-weight:800;letter-spacing:.02em;min-width:52px;text-align:right}
+  .timer .track{width:110px;height:6px;border-radius:99px;background:rgba(247,247,242,.14);overflow:hidden}
+  .timer .bar{display:block;height:100%;width:100%;background:var(--lime);transform-origin:left center}
+  .arena{
+    position:relative;flex:1;display:flex;min-height:0;
+    touch-action:none;
+    -webkit-user-select:none;user-select:none;
+    -webkit-touch-callout:none;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .side{
+    position:relative;flex:1;min-width:0;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:2px;overflow:hidden;
+    transition:filter .15s;
+  }
+  .side.p1{background:
+    radial-gradient(120% 90% at 30% 20%, #ff7a5f 0%, var(--p1) 55%, #d63d22 100%);}
+  .side.p2{background:
+    radial-gradient(120% 90% at 70% 20%, #5fa0ff 0%, var(--p2) 55%, #1d54b8 100%);}
+  .side::after{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background:repeating-linear-gradient(135deg, rgba(255,255,255,.05) 0 2px, transparent 2px 12px);
+    opacity:.5;
+  }
+  .side .who{
+    position:relative;z-index:1;
+    display:flex;align-items:center;gap:7px;
+    font-size:11px;font-weight:800;letter-spacing:.2em;
+    color:rgba(14,17,22,.82);
+    text-transform:uppercase;
+  }
+  .side .who .key{
+    font-size:9px;letter-spacing:.08em;
+    padding:3px 6px;border-radius:5px;
+    background:rgba(14,17,22,.18);
+  }
+  .side .count{
+    position:relative;z-index:1;
+    font-size:clamp(3.6rem,20vw,10rem);
+    font-weight:900;line-height:1;letter-spacing:-.06em;
+    color:#101318;
+    font-variant-numeric:tabular-nums;
+    text-shadow:0 2px 0 rgba(255,255,255,.18);
+  }
+  .side .tapnote{
+    position:relative;z-index:1;
+    font-size:10.5px;font-weight:700;letter-spacing:.16em;
+    color:rgba(14,17,22,.55);
+  }
+  .divider{
+    width:3px;flex:none;background:var(--bg);
+    box-shadow:0 0 0 1px rgba(255,255,255,.06);
+  }
+  .countdown{
+    position:absolute;inset:0;z-index:5;
+    display:none;align-items:center;justify-content:center;
+    pointer-events:none;
+    background:rgba(14,17,22,.35);
+  }
+  .countdown.show{display:flex}
+  .countdown b{
+    font-size:clamp(5rem,34vw,15rem);font-weight:900;line-height:1;
+    color:var(--lime);letter-spacing:-.04em;
+    text-shadow:0 8px 40px rgba(0,0,0,.45);
+    animation:pop .32s cubic-bezier(.2,1.6,.4,1);
+  }
+  @keyframes pop{from{transform:scale(.7);opacity:.2}to{transform:scale(1);opacity:1}}
+  .overlay{
+    position:absolute;inset:0;z-index:8;
+    display:flex;align-items:center;justify-content:center;
+    padding:16px;
+    background:rgba(10,12,16,.72);
+    backdrop-filter:blur(7px);
+    -webkit-backdrop-filter:blur(7px);
+  }
+  .arena.live .overlay{display:none}
+  .panel{
+    width:100%;max-width:430px;
+    background:#151a21;
+    border:1px solid rgba(247,247,242,.14);
+    border-radius:18px;
+    padding:20px 18px;
+    box-shadow:0 24px 60px rgba(0,0,0,.45);
+    text-align:center;
+  }
+  .panel h1,.panel h2{margin:0 0 6px;font-size:clamp(1.5rem,5.6vw,1.9rem);line-height:1.2;letter-spacing:-.02em}
+  .panel h1 em,.panel h2 em{font-style:normal;color:var(--lime)}
+  .panel .sub{margin:0 0 16px;font-size:12.5px;line-height:1.65;color:var(--muted)}
+  .modes{display:flex;gap:8px;margin:0 0 14px}
+  .modes button{
+    flex:1;font:inherit;font-size:13px;font-weight:800;
+    color:var(--white);background:transparent;
+    border:1.5px solid rgba(247,247,242,.26);border-radius:10px;
+    padding:10px 8px;min-height:44px;cursor:pointer;
+    transition:background .15s,border-color .15s,color .15s;
+  }
+  .modes button:hover{border-color:var(--white)}
+  .modes button.on{background:var(--lime);border-color:var(--lime);color:#141a10}
+  .startbtn{
+    width:100%;font:inherit;font-size:16px;font-weight:900;letter-spacing:.04em;
+    color:#141a10;background:var(--lime);
+    border:0;border-radius:12px;padding:15px;min-height:54px;cursor:pointer;
+    box-shadow:0 4px 0 #9fbe2f;
+    transition:transform .08s,box-shadow .08s;
+  }
+  .startbtn:hover{filter:brightness(1.04)}
+  .startbtn:active{transform:translateY(3px);box-shadow:0 1px 0 #9fbe2f}
+  .tiny{margin:12px 0 0;font-size:10.5px;color:var(--muted);line-height:1.6}
+  .result-head{
+    font-size:clamp(1.35rem,5.4vw,1.75rem);font-weight:900;letter-spacing:-.01em;margin:0 0 2px;
+  }
+  .result-head span{display:block;font-size:11px;font-weight:700;letter-spacing:.2em;color:var(--muted);margin-top:6px}
+  .scores{display:flex;gap:10px;margin:16px 0 6px}
+  .score{
+    flex:1;border-radius:14px;padding:10px 8px 12px;
+    background:rgba(255,255,255,.06);
+    border:1px solid rgba(255,255,255,.08);
+  }
+  .score .lab{font-size:10px;font-weight:800;letter-spacing:.18em;color:var(--muted)}
+  .score .val{font-size:clamp(2rem,9vw,2.6rem);font-weight:900;line-height:1.15;font-variant-numeric:tabular-nums}
+  .score .rate{font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .score.win{border-color:var(--lime);box-shadow:0 0 0 1px var(--lime) inset}
+  .score.win .val{color:var(--lime)}
+  .rank{margin:10px 0 0;font-size:12.5px;color:var(--white)}
+  .rank b{color:var(--lime)}
+  .diff{margin:2px 0 0;font-size:11.5px;color:var(--muted)}
+  .res-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+  .res-actions button{
+    font:inherit;font-size:13px;font-weight:800;
+    border-radius:11px;min-height:46px;padding:11px 12px;cursor:pointer;
+    color:var(--white);background:transparent;
+    border:1.5px solid rgba(247,247,242,.24);
+    flex:1 1 40%;
+    transition:background .15s,border-color .15s;
+  }
+  .res-actions button:hover{border-color:var(--white);background:rgba(255,255,255,.06)}
+  .res-actions .again{
+    flex:1 1 100%;background:var(--lime);color:#141a10;border-color:var(--lime);
+  }
+  .res-actions .again:hover{background:var(--lime);border-color:var(--lime);filter:brightness(1.04)}
+  button:focus-visible{outline:3px solid var(--lime);outline-offset:3px}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none!important;transition:none!important}
+  }
+  @media (max-height:560px){
+    .side .count{font-size:clamp(2.8rem,16vh,6rem)}
+    .panel{padding:14px 14px}
+    .panel h1,.panel h2{font-size:1.35rem}
+    .panel .sub{margin-bottom:10px}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="hud">
+    <div class="title">連打ダービー<span>5.0 SEC TAP DUEL</span></div>
+    <div class="timer">
+      <span class="clock" id="clock">5.00</span>
+      <span class="track" aria-hidden="true"><span class="bar" id="bar"></span></span>
+    </div>
+  </header>
+
+  <main class="arena" id="arena">
+    <section class="side p1" id="side1" aria-label="プレイヤー1の連打エリア">
+      <div class="who">PLAYER 1 <span class="key">F / A</span></div>
+      <div class="count" id="c1">0</div>
+      <div class="tapnote">ここを連打</div>
+    </section>
+    <div class="divider" aria-hidden="true"></div>
+    <section class="side p2" id="side2" aria-label="プレイヤー2の連打エリア">
+      <div class="who" id="who2">PLAYER 2 <span class="key">J / L</span></div>
+      <div class="count" id="c2">0</div>
+      <div class="tapnote" id="note2">ここを連打</div>
+    </section>
+
+    <div class="countdown" id="countdown" aria-hidden="true"><b id="cdText">3</b></div>
+
+    <div class="overlay" id="overlay">
+      <div class="panel" id="panelIdle">
+        <h1>5秒で、<em>何回</em>押せる?</h1>
+        <p class="sub">画面を半分こ。合図と同時に、自分の側を連打。<br>勝敗と「1秒あたりの回数」まで出ます。</p>
+        <div class="modes" role="group" aria-label="対戦モード">
+          <button type="button" data-mode="duo" class="on" aria-pressed="true">ふたりで</button>
+          <button type="button" data-mode="cpu" aria-pressed="false">CPUと</button>
+        </div>
+        <button type="button" class="startbtn" id="startBtn">スタート</button>
+        <p class="tiny">キーボードでも遊べます：左 F / A、右 J / L。Spaceでスタート。</p>
+      </div>
+
+      <div class="panel" id="panelResult" hidden>
+        <p class="result-head" id="resHead" aria-live="polite"><span id="resTitle">PLAYER 1 の勝ち</span><span id="resSub">5.00秒の結果</span></p>
+        <div class="scores">
+          <div class="score" id="score1">
+            <div class="lab">PLAYER 1</div>
+            <div class="val" id="r1">0</div>
+            <div class="rate" id="rate1">0.0 回/秒</div>
+          </div>
+          <div class="score" id="score2">
+            <div class="lab" id="lab2">PLAYER 2</div>
+            <div class="val" id="r2">0</div>
+            <div class="rate" id="rate2">0.0 回/秒</div>
+          </div>
+        </div>
+        <p class="diff" id="resDiff">差は 0 回</p>
+        <p class="rank" id="resRank"></p>
+        <div class="res-actions">
+          <button type="button" class="again" id="againBtn">もう一回</button>
+          <button type="button" id="copyBtn">結果をコピー</button>
+          <button type="button" id="backBtn">モードを変える</button>
+        </div>
+        <p class="tiny" id="copyNote" aria-live="polite"></p>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var DUR = 5;
+  var URL = "https://rinderdragon0823.github.io/site-factory/renda-duel/";
+
+  var arena = document.getElementById("arena");
+  var overlay = document.getElementById("overlay");
+  var panelIdle = document.getElementById("panelIdle");
+  var panelResult = document.getElementById("panelResult");
+  var countdown = document.getElementById("countdown");
+  var cdText = document.getElementById("cdText");
+  var clock = document.getElementById("clock");
+  var bar = document.getElementById("bar");
+  var c1 = document.getElementById("c1");
+  var c2 = document.getElementById("c2");
+  var who2 = document.getElementById("who2");
+  var note2 = document.getElementById("note2");
+  var lab2 = document.getElementById("lab2");
+  var score1 = document.getElementById("score1");
+  var score2 = document.getElementById("score2");
+  var resHead = document.getElementById("resHead");
+  var resTitle = document.getElementById("resTitle");
+  var resSub = document.getElementById("resSub");
+  var r1 = document.getElementById("r1");
+  var r2 = document.getElementById("r2");
+  var rate1 = document.getElementById("rate1");
+  var rate2 = document.getElementById("rate2");
+  var resDiff = document.getElementById("resDiff");
+  var resRank = document.getElementById("resRank");
+  var copyNote = document.getElementById("copyNote");
+
+  var state = "idle";
+  var mode = "duo";
+  var n1 = 0;
+  var n2 = 0;
+  var cpuAcc = 0;
+  var startTime = 0;
+  var lastFrame = 0;
+  var raf = 0;
+  var timers = [];
+  var lastResult = null;
+  var reduce = false;
+
+  try { reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) { reduce = false; }
+
+  function setMode(next) {
+    mode = next;
+    document.querySelectorAll(".modes button").forEach(function (b) {
+      var on = b.getAttribute("data-mode") === mode;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+    if (mode === "cpu") {
+      who2.innerHTML = 'CPU <span class="key">LV.2</span>';
+      note2.textContent = "CPUが連打中";
+      lab2.textContent = "CPU";
+      side2.setAttribute("aria-label", "CPUの連打エリア（操作不要）");
+    } else {
+      who2.innerHTML = 'PLAYER 2 <span class="key">J / L</span>';
+      note2.textContent = "ここを連打";
+      lab2.textContent = "PLAYER 2";
+      side2.setAttribute("aria-label", "プレイヤー2の連打エリア");
+    }
+  }
+
+  function resetCounts() {
+    n1 = 0; n2 = 0; cpuAcc = 0;
+    c1.textContent = "0";
+    c2.textContent = "0";
+    clock.textContent = DUR.toFixed(2);
+    bar.style.transform = "scaleX(1)";
+    copyNote.textContent = "";
+  }
+
+  function clearTimers() {
+    timers.forEach(function (t) { clearTimeout(t); clearInterval(t); });
+    timers = [];
+  }
+
+  function showCountdown(text) {
+    cdText.textContent = text;
+    if (!reduce) {
+      cdText.style.animation = "none";
+      void cdText.offsetWidth;
+      cdText.style.animation = "";
+    }
+  }
+
+  function startGame() {
+    if (state === "countdown" || state === "playing") return;
+    state = "countdown";
+    clearTimers();
+    resetCounts();
+    panelIdle.hidden = true;
+    panelResult.hidden = true;
+    arena.classList.add("live");
+    countdown.classList.add("show");
+
+    var seq = ["3", "2", "1", "START"];
+    seq.forEach(function (label, i) {
+      timers.push(setTimeout(function () {
+        showCountdown(label);
+      }, i * 620));
+    });
+    timers.push(setTimeout(function () {
+      countdown.classList.remove("show");
+      beginPlay();
+    }, seq.length * 620));
+  }
+
+  function beginPlay() {
+    state = "playing";
+    resetCounts();
+    startTime = performance.now();
+    lastFrame = startTime;
+    raf = requestAnimationFrame(frame);
+  }
+
+  function frame(now) {
+    if (state !== "playing") return;
+    var dt = Math.max(0, (now - lastFrame) / 1000);
+    lastFrame = now;
+    var elapsed = (now - startTime) / 1000;
+    var left = Math.max(0, DUR - elapsed);
+    clock.textContent = left.toFixed(2);
+    bar.style.transform = "scaleX(" + (left / DUR).toFixed(4) + ")";
+
+    if (mode === "cpu") {
+      cpuAcc += dt * (7.4 + Math.sin(elapsed * 6.1) * 0.9 + Math.random() * 0.7);
+      var add = Math.floor(cpuAcc);
+      if (add > 0) {
+        cpuAcc -= add;
+        n2 += add;
+        c2.textContent = String(n2);
+      }
+    }
+
+    if (left <= 0) { finish(); return; }
+    raf = requestAnimationFrame(frame);
+  }
+
+  function rank(rate) {
+    if (rate >= 11) return "指の暴走機関車";
+    if (rate >= 9) return "連打の申し子";
+    if (rate >= 7) return "速い指";
+    if (rate >= 5) return "ふつうの人";
+    if (rate >= 3) return "のんびり屋";
+    return "休憩中?";
+  }
+
+  function finish() {
+    state = "result";
+    cancelAnimationFrame(raf);
+    clock.textContent = "0.00";
+    bar.style.transform = "scaleX(0)";
+    arena.classList.remove("live");
+
+    var p1 = n1;
+    var p2 = n2;
+    var rateA = p1 / DUR;
+    var rateB = p2 / DUR;
+    var head;
+    var winnerRate;
+    var winnerName;
+
+    if (p1 === p2) {
+      head = "引き分け";
+      winnerRate = rateA;
+      winnerName = "ふたりとも";
+    } else if (p1 > p2) {
+      head = "PLAYER 1 の勝ち";
+      winnerRate = rateA;
+      winnerName = "PLAYER 1";
+    } else {
+      head = mode === "cpu" ? "CPU の勝ち" : "PLAYER 2 の勝ち";
+      winnerRate = rateB;
+      winnerName = mode === "cpu" ? "CPU" : "PLAYER 2";
+    }
+
+    resTitle.textContent = head;
+    resSub.textContent = DUR.toFixed(2) + "秒の結果";
+    r1.textContent = String(p1);
+    r2.textContent = String(p2);
+    rate1.textContent = rateA.toFixed(1) + " 回/秒";
+    rate2.textContent = rateB.toFixed(1) + " 回/秒";
+    score1.classList.toggle("win", p1 > p2);
+    score2.classList.toggle("win", p2 > p1);
+    resDiff.textContent = p1 === p2 ? "差は 0 回" : "差は " + Math.abs(p1 - p2) + " 回";
+    resRank.innerHTML = "称号：<b>" + rank(winnerRate) + "</b>（" + winnerName + "）";
+
+    lastResult = {
+      p1: p1, p2: p2, rateA: rateA, rateB: rateB,
+      head: head, winnerRate: winnerRate, mode: mode
+    };
+
+    panelIdle.hidden = true;
+    panelResult.hidden = false;
+    copyNote.textContent = "";
+    document.getElementById("againBtn").focus({ preventScroll: true });
+  }
+
+  function backToIdle() {
+    clearTimers();
+    cancelAnimationFrame(raf);
+    state = "idle";
+    arena.classList.remove("live");
+    countdown.classList.remove("show");
+    resetCounts();
+    panelResult.hidden = true;
+    panelIdle.hidden = false;
+  }
+
+  function addTap(side) {
+    if (state !== "playing") return;
+    if (side === 2) {
+      if (mode === "cpu") return;
+      n2++;
+      c2.textContent = String(n2);
+    } else {
+      n1++;
+      c1.textContent = String(n1);
+    }
+    if (navigator.vibrate) {
+      try { navigator.vibrate(8); } catch (e) {}
+    }
+  }
+
+  var side1 = document.getElementById("side1");
+  var side2 = document.getElementById("side2");
+
+  side1.addEventListener("pointerdown", function (e) {
+    e.preventDefault();
+    addTap(1);
+  }, { passive: false });
+
+  side2.addEventListener("pointerdown", function (e) {
+    e.preventDefault();
+    addTap(2);
+  }, { passive: false });
+
+  arena.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+
+  document.querySelectorAll(".modes button").forEach(function (b) {
+    b.addEventListener("click", function () { setMode(b.getAttribute("data-mode")); });
+  });
+
+  document.getElementById("startBtn").addEventListener("click", startGame);
+  document.getElementById("againBtn").addEventListener("click", startGame);
+  document.getElementById("backBtn").addEventListener("click", backToIdle);
+
+  document.getElementById("copyBtn").addEventListener("click", function () {
+    if (!lastResult) return;
+    var L = lastResult;
+    var text = "【連打ダービー】5秒で " + L.p1 + " 回 vs " + L.p2 + " 回。"
+      + L.head + "、勝者の1秒あたり " + L.winnerRate.toFixed(1) + " 回。"
+      + "あなたも挑戦 → " + URL;
+    copyText(text).then(function (ok) {
+      copyNote.textContent = ok ? "コピーしました。そのまま貼れます。" : "コピーできませんでした。";
+    });
+  });
+
+  function copyText(text) {
+    return new Promise(function (resolve) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () { resolve(true); }, function () { resolve(fallbackCopy(text)); });
+      } else {
+        resolve(fallbackCopy(text));
+      }
+    });
+  }
+
+  function fallbackCopy(text) {
+    try {
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.top = "-1000px";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok;
+    } catch (e) { return false; }
+  }
+
+  document.addEventListener("keydown", function (e) {
+    var tag = (e.target && e.target.tagName) || "";
+    if (tag === "BUTTON" && (e.key === " " || e.key === "Enter")) return;
+
+    var k = e.key.toLowerCase();
+    if (state === "playing") {
+      if (k === "f" || k === "a") { e.preventDefault(); addTap(1); return; }
+      if (k === "j" || k === "l") { e.preventDefault(); addTap(2); return; }
+    }
+    if (k === " " || k === "enter") {
+      if (state === "idle" || state === "result") {
+        e.preventDefault();
+        resetCounts();
+        startGame();
+      }
+      return;
+    }
+    if (k === "escape" && state !== "playing") {
+      e.preventDefault();
+      backToIdle();
+    }
+  });
+
+  setMode("duo");
+  resetCounts();
+  panelIdle.hidden = false;
+  panelResult.hidden = true;
+})();
+</script>
+</body>
+</html>
