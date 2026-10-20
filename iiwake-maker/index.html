@@ -1,0 +1,475 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>言い訳メーカー | 説得力採点つき</title>
+<meta name="description" content="状況を選ぶだけで、それっぽい言い訳を生成。説得力とバレる確率をその場で採点します。">
+<meta property="og:title" content="言い訳メーカー | 説得力採点つき">
+<meta property="og:description" content="遅刻も締切も、あと10秒で言い訳に。説得力スコアとバレる確率を採点します。">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#0a0a0c">
+<meta name="color-scheme" content="dark">
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  :root{
+    --bg:#0a0a0c; --ink:#f4f4ef; --dim:#8f928a; --line:#26272e; --card:#121317;
+    --acid:#d8ff3e; --ice:#8ef0ff; --gold:#ffd479; --orange:#ffa76b; --hot:#ff5c7a;
+  }
+  html,body{min-height:100%}
+  body{
+    margin:0; min-height:100dvh; background:var(--bg); color:var(--ink);
+    font:16px/1.65 system-ui,-apple-system,"Segoe UI","Hiragino Sans","Noto Sans JP",sans-serif;
+    display:flex; justify-content:center;
+    padding:calc(14px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom));
+    overflow-x:hidden;
+  }
+  body::before{
+    content:""; position:fixed; inset:0; pointer-events:none; z-index:0;
+    background-image:
+      radial-gradient(760px 460px at 50% -12%, rgba(216,255,62,.10) 0%, transparent 62%),
+      linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
+    background-size:auto,44px 44px,44px 44px;
+  }
+  .wrap{position:relative; z-index:1; width:100%; max-width:520px; display:flex; flex-direction:column; gap:14px}
+
+  header{display:flex; align-items:center; justify-content:space-between; gap:10px}
+  .brand{font-size:11px; letter-spacing:.26em; font-weight:700; color:var(--dim)}
+  .brand b{color:var(--acid)}
+  .stamp{
+    font-size:10px; letter-spacing:.12em; color:var(--dim); border:1px solid var(--line);
+    border-radius:999px; padding:4px 9px; white-space:nowrap;
+  }
+
+  h1{
+    margin:2px 0 0; font-size:clamp(33px,10.4vw,46px); line-height:1.04;
+    letter-spacing:-.02em; font-weight:800;
+  }
+  h1 em{font-style:normal; color:var(--acid); display:inline-block}
+  .lead{margin:8px 0 0; color:var(--dim); font-size:13.5px; line-height:1.6}
+  .lead b{color:var(--ink); font-weight:600}
+
+  .chips{display:flex; gap:8px; overflow-x:auto; padding:2px 0 4px; scrollbar-width:none; -ms-overflow-style:none; margin:0 -2px}
+  .chips::-webkit-scrollbar{display:none}
+  .chip{
+    flex:0 0 auto; appearance:none; cursor:pointer;
+    background:transparent; color:var(--dim); border:1px solid var(--line);
+    border-radius:999px; padding:8px 14px; font:inherit; font-size:13px; font-weight:600;
+    transition:background .18s,border-color .18s,color .18s,transform .12s;
+  }
+  .chip:hover{color:var(--ink); border-color:#3a3c46}
+  .chip:active{transform:scale(.96)}
+  .chip[aria-selected="true"]{background:var(--ink); border-color:var(--ink); color:#0a0a0c}
+
+  .go{
+    width:100%; cursor:pointer; font:inherit; font-weight:800; font-size:16px;
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:18px 20px; border:0; border-radius:16px;
+    background:var(--acid); color:#0a0a0c; letter-spacing:.01em;
+    box-shadow:0 10px 30px -14px rgba(216,255,62,.75);
+    transition:transform .12s ease, box-shadow .18s, filter .18s;
+  }
+  .go:hover{filter:brightness(1.06)}
+  .go:active{transform:translateY(1px) scale(.995)}
+  .go small{font-size:10px; letter-spacing:.16em; font-weight:700; opacity:.55; border:1px solid rgba(0,0,0,.22); border-radius:6px; padding:3px 6px}
+  @media (hover:none){ .go small{display:none} }
+
+  .card{
+    border:1px solid var(--line); border-radius:20px; padding:16px 16px 14px;
+    background:linear-gradient(180deg,#15161b 0%,#0e0f12 100%);
+    box-shadow:0 24px 50px -34px #000;
+    will-change:transform,opacity;
+  }
+  @keyframes pop{from{transform:translateY(8px) scale(.985); opacity:.3} to{transform:none; opacity:1}}
+  .card.flash{animation:pop .3s cubic-bezier(.2,.9,.25,1)}
+
+  .top{display:flex; align-items:flex-start; gap:14px}
+  .rank{
+    flex:0 0 auto; width:66px; height:66px; border-radius:15px;
+    display:grid; place-items:center; font-size:38px; font-weight:900; line-height:1;
+    letter-spacing:-.04em; color:var(--acid);
+    background:rgba(216,255,62,.09); border:1px solid rgba(216,255,62,.35);
+    transition:color .2s, background .2s, border-color .2s;
+  }
+  .rank[data-r="A"]{color:var(--ice); background:rgba(142,240,255,.09); border-color:rgba(142,240,255,.35)}
+  .rank[data-r="B"]{color:var(--gold); background:rgba(255,212,121,.09); border-color:rgba(255,212,121,.35)}
+  .rank[data-r="C"]{color:var(--orange); background:rgba(255,167,107,.09); border-color:rgba(255,167,107,.35)}
+  .rank[data-r="D"]{color:var(--hot); background:rgba(255,92,122,.09); border-color:rgba(255,92,122,.35)}
+
+  .meta{flex:1 1 auto; min-width:0; padding-top:2px}
+  .scoreline{display:flex; align-items:baseline; gap:6px; font-size:11px; letter-spacing:.14em; color:var(--dim); font-weight:700}
+  .scoreline b{font-size:30px; letter-spacing:-.03em; color:var(--ink); font-variant-numeric:tabular-nums; line-height:1}
+  .scoreline i{font-style:normal; font-size:11px; color:var(--dim); letter-spacing:0; font-weight:600}
+  .bar{height:6px; border-radius:99px; background:#22242b; overflow:hidden; margin:9px 0 8px}
+  .bar i{display:block; height:100%; width:0; border-radius:99px; background:linear-gradient(90deg,var(--acid),#a8ff9a); transition:width .55s cubic-bezier(.2,.9,.25,1), background .2s}
+  .card[data-r="B"] .bar i{background:linear-gradient(90deg,var(--gold),#ffe9b0)}
+  .card[data-r="C"] .bar i{background:linear-gradient(90deg,var(--orange),#ffd0a8)}
+  .card[data-r="D"] .bar i{background:linear-gradient(90deg,var(--hot),#ff9fb2)}
+
+  .verdict{margin:0; font-size:12.5px; line-height:1.5; color:var(--dim)}
+  .verdict b{color:var(--ink); font-weight:700}
+
+  .quote{
+    margin:14px 0 0; padding:14px 0 0; border-top:1px dashed #2b2d35;
+    font-size:16.5px; line-height:1.75; font-weight:600; letter-spacing:.005em;
+    overflow-wrap:anywhere;
+  }
+  .quote::before{content:"「"; color:var(--acid); font-weight:800}
+  .quote::after{content:"」"; color:var(--acid); font-weight:800}
+
+  .foot{display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; margin-top:12px; font-size:11.5px; color:var(--dim)}
+  .foot .dot{width:3px; height:3px; border-radius:50%; background:#4a4d57}
+  .foot b{color:var(--ink); font-weight:700; font-variant-numeric:tabular-nums}
+
+  .actions{display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px}
+  .ghost{
+    appearance:none; cursor:pointer; font:inherit; font-size:12.5px; font-weight:700; text-align:center; text-decoration:none;
+    color:var(--ink); background:#15161b; border:1px solid var(--line); border-radius:12px;
+    padding:12px 8px; transition:background .16s,border-color .16s,transform .1s; white-space:nowrap;
+  }
+  .ghost:hover{background:#1c1e25; border-color:#3a3c46}
+  .ghost:active{transform:scale(.98)}
+  .ghost[disabled]{opacity:.55; cursor:default}
+
+  footer{color:#5f635c; font-size:11px; line-height:1.6; padding:2px 2px 4px}
+
+  :focus-visible{outline:2px solid var(--acid); outline-offset:3px}
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none !important; transition:none !important}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">IIWAKE <b>GENERATOR</b></div>
+    <div class="stamp">説得力採点つき</div>
+  </header>
+
+  <main>
+    <h1>言い訳、<br><em>つくります。</em></h1>
+    <p class="lead">状況を選ぶだけ。<b>10秒</b>でそれっぽい言い訳と、<b>バレる確率</b>が出ます。</p>
+
+    <div class="chips" id="chips" role="tablist" aria-label="言い訳する状況"></div>
+
+    <button class="go" id="go" type="button">
+      <span>言い訳をひねり出す</span>
+      <small>SPACE</small>
+    </button>
+
+    <section class="card" id="card" aria-live="polite" data-r="S">
+      <div class="top">
+        <div class="rank" id="rank" data-r="S">S</div>
+        <div class="meta">
+          <div class="scoreline">説得力 <b id="score">0</b><i>/ 100</i></div>
+          <div class="bar"><i id="bar"></i></div>
+          <p class="verdict" id="verdict"></p>
+        </div>
+      </div>
+      <p class="quote" id="quote"></p>
+      <div class="foot">
+        <span>バレる確率 <b id="risk">0%</b></span>
+        <span class="dot"></span>
+        <span id="damage"></span>
+      </div>
+    </section>
+
+    <div class="actions" id="actions">
+      <button class="ghost" id="copy" type="button">コピー</button>
+      <a class="ghost" id="tweet" href="#" target="_blank" rel="noopener">Xで見せる</a>
+      <button class="ghost" id="again" type="button">もう一回</button>
+    </div>
+  </main>
+
+  <footer>※フィクションです。実際の遅刻には、素直に謝りましょう。</footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var DATA = {
+    late: {
+      label: '遅刻',
+      open: ['正直に言うと、', '言いにくいんですが、', '落ち着いて聞いてください。', '怒る前に、ひとつだけ。'],
+      core: [
+        '家を出た瞬間に、鍵を部屋の中に置き忘れたことに気づきました',
+        '駅で知らないおばあさんに道を聞かれ、気づいたら目的地まで案内していました',
+        'いつもの電車が、なぜか今日だけ僕の前を通り過ぎていきました',
+        'スマホの充電が1%になり、充電器を探して家を3周しました',
+        'エレベーターが各階に止まり、中で人生について考えていました',
+        'コンビニの新商品が気になって、レジ前で10分ほど悩みました',
+        '猫が玄関で寝ていて、起こせないまま20分が経ちました',
+        '最寄り駅を乗り過ごし、知らない街の魅力に打ちのめされていました'
+      ],
+      tail: [
+        '…という夢を見ていました。',
+        'つまり、誰も悪くないんです。',
+        'ここまで聞いて、許す気になりましたよね。',
+        'なので今日は、なかったことにしましょう。',
+        '反省はしています。意思はあります。結果は出ていません。'
+      ]
+    },
+    homework: {
+      label: '課題・宿題',
+      open: ['信じてほしいんですが、', '恥を忍んで言うと、', '採点する前に聞いてください。', 'まず事実だけを言います。'],
+      core: [
+        'ファイルを保存したのは、存在しないフォルダでした',
+        'PCの更新が18時間終わりませんでした',
+        'やる気は満タンだったのに、Wi-Fiが0でした',
+        '書き終えた直後に、猫がキーボードの上を歩きました',
+        '参考文献を読み始めたら、参考文献の参考文献まで読んでいました',
+        '締切を1日勘違いしていて、その1日を丁寧に生きていました',
+        'USBメモリを洗濯機で洗い、乾燥まで完了しています',
+        '紙に書いたのですが、その紙が今どこにもありません'
+      ],
+      tail: [
+        '…という理由で、評価は心の目でお願いします。',
+        'ちなみに、やる気だけは満点です。',
+        '次回は必ず出します。次回がいつかは置いておいて。',
+        'ここまでの説明で、単位の半分は戻ってくるはずです。',
+        '再提出用のファイル名はもう考えてあります。'
+      ]
+    },
+    meeting: {
+      label: '会議',
+      open: ['率直に申し上げますと、', '恐縮ですが、', '場を乱す前に言っておきます。', '報告があります。'],
+      core: [
+        '前の会議が、終わる気配を一切見せませんでした',
+        '「すぐ戻ります」と言ったまま、別の会議に吸い込まれました',
+        'カメラをオンにした瞬間、背景の洗濯物と目が合いました',
+        'マイクがミュートのまま、3分間ひとりで熱弁していました',
+        '招待リンクを開いたら、別の会社の会議に入っていました',
+        '資料を共有したつもりが、自分の顔写真を共有していました',
+        '会議室を間違え、違う部署の作戦会議に参加していました',
+        '「あと1分」を6回繰り返していました'
+      ],
+      tail: [
+        '…と、議事録には書いておいてください。',
+        '結論としては、私は悪くないです。',
+        'この件は、次回の課題にします。',
+        'オンラインで良かった、が今日の学びです。',
+        'なお、多少は反省しています。'
+      ]
+    },
+    nomikai: {
+      label: '飲み会',
+      open: ['本当に申し訳ないのですが、', '迷った末に、', '心苦しいのですが、', '先に謝っておきます。'],
+      core: [
+        '明日の朝が、今日の夜より早く来ることが確定しました',
+        '財布の中身が、先週の飲み会で退役しました',
+        '人見知りが本日、満員御礼でして',
+        '家で飼っている観葉植物の体調が良くありません',
+        '「行けたら行く」を実行する勇気が出ませんでした',
+        '月曜の自分に、日曜の自分が謝罪しています',
+        '飲み会の翌日の予定が、すでに3件入っています',
+        '今月のカロリーを、あと3日で使い切る必要があります'
+      ],
+      tail: [
+        '…ということで、今回は心だけ参加します。',
+        '写真だけ送ってください。寂しいので。',
+        '次こそ行きます。次こそは。',
+        'お店の選定、心から感謝しています。',
+        'なお、二次会の話は聞かなかったことにします。'
+      ]
+    },
+    deadline: {
+      label: '締切',
+      open: ['正直に報告します。', '怒られる覚悟で言うと、', '進捗はあります。形はありません。', 'いい話と悪い話があります。'],
+      core: [
+        '8割できています。残りの8割が終わっていません',
+        '仕様が変わるたびに、心も仕様変更していました',
+        'テストを書いたら、テストの方が先に完成しました',
+        'レビュー待ちのまま、レビュアーが異動しました',
+        '設計を見直したら、別のプロダクトが生まれました',
+        '「あと少し」の定義を、いま一度話し合う必要があります',
+        'ローカルでは動いています。環境が悪いんです',
+        '要件定義の「いい感じに」を、まだ解釈しています'
+      ],
+      tail: [
+        '…というわけで、納期もいい感じにお願いします。',
+        '進捗としては、0%ではないです。0.3%です。',
+        'この会話自体が、立派な成果物だと思いませんか。',
+        'まずは、この言い訳のレビューをお願いします。',
+        '明日の私に、期待してください。'
+      ]
+    }
+  };
+
+  var VERDICTS = {
+    S: ['上司は8割信じました。', 'その言い訳、特許を取れます。', '会議室が3秒だけ拍手に包まれました。'],
+    A: ['怪しまれつつも、通りました。', '「まあ、今回はいい」が出ました。', '眉間のシワが1本減りました。'],
+    B: ['「で?」と言われます。', '半分だけ信じてもらえました。', '「次は気をつけて」で終わりそうです。'],
+    C: ['「正直に言いなさい」が返ってきます。', '空気が0.5度下がりました。', '言い終わる前にため息が来ます。'],
+    D: ['反省文の下書きを始めてください。', 'その言い訳は、来世で使いましょう。', '聞いた人が静かに首を振りました。']
+  };
+
+  var DAMAGE = [
+    '信頼 -12',
+    '上司の眉間のシワ +2',
+    '謎の達成感 +40',
+    '評価 -8、ネタ価値 +30',
+    '会議室の温度 -1.5℃',
+    '来週の雑務 +1件',
+    'あなたの株 -3',
+    '笑い +1(ただし乾いた笑い)'
+  ];
+
+  var current = 'late';
+  var lastText = '';
+
+  var chipsEl = document.getElementById('chips');
+  var goEl = document.getElementById('go');
+  var cardEl = document.getElementById('card');
+  var rankEl = document.getElementById('rank');
+  var scoreEl = document.getElementById('score');
+  var barEl = document.getElementById('bar');
+  var verdictEl = document.getElementById('verdict');
+  var quoteEl = document.getElementById('quote');
+  var riskEl = document.getElementById('risk');
+  var damageEl = document.getElementById('damage');
+  var copyEl = document.getElementById('copy');
+  var tweetEl = document.getElementById('tweet');
+  var againEl = document.getElementById('again');
+
+  function pick(arr) {
+    return arr[Math.floor(Math.random() * arr.length)];
+  }
+
+  function buildChips() {
+    var keys = Object.keys(DATA);
+    keys.forEach(function (key) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'chip';
+      b.setAttribute('role', 'tab');
+      b.dataset.key = key;
+      b.textContent = DATA[key].label;
+      b.setAttribute('aria-selected', key === current ? 'true' : 'false');
+      b.addEventListener('click', function () {
+        select(key);
+        generate();
+      });
+      chipsEl.appendChild(b);
+    });
+  }
+
+  function select(key) {
+    current = key;
+    Array.prototype.forEach.call(chipsEl.children, function (el) {
+      el.setAttribute('aria-selected', el.dataset.key === key ? 'true' : 'false');
+    });
+    var active = chipsEl.querySelector('[data-key="' + key + '"]');
+    if (active) {
+      var left = active.offsetLeft - (chipsEl.clientWidth - active.offsetWidth) / 2;
+      chipsEl.scrollTo({ left: Math.max(0, left), behavior: 'smooth' });
+    }
+  }
+
+  function rankOf(score) {
+    if (score >= 92) return 'S';
+    if (score >= 80) return 'A';
+    if (score >= 66) return 'B';
+    if (score >= 50) return 'C';
+    return 'D';
+  }
+
+  function generate() {
+    var set = DATA[current];
+    var core = pick(set.core);
+    var text = pick(set.open) + core + pick(set.tail);
+
+    var bonus = Math.min(9, Math.max(0, (text.length - 44) / 9));
+    var score = Math.round(Math.min(99, 30 + Math.random() * 58 + bonus));
+    var rank = rankOf(score);
+    var risk = Math.max(2, Math.min(97, Math.round(104 - score + (Math.random() * 10 - 5))));
+
+    lastText = '【' + set.label + 'の言い訳】説得力' + score + '点(' + rank + 'ランク)\n「' + text + '」\n#言い訳メーカー';
+
+    cardEl.dataset.r = rank;
+    rankEl.dataset.r = rank;
+    rankEl.textContent = rank;
+    scoreEl.textContent = String(score);
+    barEl.style.width = score + '%';
+    verdictEl.innerHTML = '';
+    verdictEl.textContent = pick(VERDICTS[rank]);
+    quoteEl.textContent = text;
+    riskEl.textContent = risk + '%';
+    damageEl.textContent = pick(DAMAGE);
+
+    cardEl.classList.remove('flash');
+    void cardEl.offsetWidth;
+    cardEl.classList.add('flash');
+
+    tweetEl.href = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(lastText) +
+      '&url=' + encodeURIComponent(location.href.split('#')[0]);
+    copyEl.textContent = 'コピー';
+    copyEl.disabled = false;
+  }
+
+  function fallbackCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.top = '0';
+    ta.style.left = '0';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    document.body.removeChild(ta);
+    return ok;
+  }
+
+  copyEl.addEventListener('click', function () {
+    var text = quoteEl.textContent;
+    var done = function () {
+      copyEl.textContent = 'コピーしました';
+      copyEl.disabled = true;
+      setTimeout(function () {
+        copyEl.textContent = 'コピー';
+        copyEl.disabled = false;
+      }, 1600);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () {
+        if (fallbackCopy(text)) done();
+      });
+    } else if (fallbackCopy(text)) {
+      done();
+    }
+  });
+
+  goEl.addEventListener('click', generate);
+  againEl.addEventListener('click', generate);
+
+  document.addEventListener('keydown', function (e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    var t = e.target;
+    if (t && t.closest && t.closest('button, a')) return;
+
+    if (e.key === ' ' || e.key === 'Enter' || e.key === 'r' || e.key === 'R') {
+      e.preventDefault();
+      generate();
+      return;
+    }
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      var keys = Object.keys(DATA);
+      var i = keys.indexOf(current);
+      var next = (i + (e.key === 'ArrowRight' ? 1 : keys.length - 1)) % keys.length;
+      select(keys[next]);
+      generate();
+    }
+  });
+
+  buildChips();
+  generate();
+})();
+</script>
+</body>
+</html>
