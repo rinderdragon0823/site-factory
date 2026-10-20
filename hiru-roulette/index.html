@@ -21,6 +21,7 @@
     --line:rgba(36,31,26,.14);
   }
   *{box-sizing:border-box}
+  [hidden]{display:none!important}
   html,body{margin:0}
   body{
     background:
@@ -100,6 +101,36 @@
   .spin:disabled{background:var(--accent);opacity:.55;cursor:default;box-shadow:5px 5px 0 rgba(36,31,26,.4);transform:none}
   .spin:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
   .status{margin:10px 0 0;text-align:center;font-size:12px;color:var(--muted);min-height:1.3em}
+  .spin.secondary{
+    margin-top:8px;font-size:14px;letter-spacing:.03em;
+    color:var(--ink);background:#fffdf8;border-width:2px;
+    box-shadow:4px 4px 0 rgba(36,31,26,.16);
+  }
+  .spin.secondary:hover{background:#fff4e6;filter:none}
+
+  .multi{margin-top:10px}
+  .mstatus{margin:0 0 8px;text-align:center;font-size:12px;color:var(--muted);min-height:1.3em}
+  .mrow{
+    display:flex;align-items:center;gap:14px;
+    padding:10px 12px;margin-top:10px;
+    background:#fffdf8;border:2px solid var(--ink);border-radius:16px;
+    box-shadow:3px 3px 0 rgba(36,31,26,.12);
+  }
+  .mini{width:104px;height:104px;flex:0 0 104px;display:block}
+  .mtext{min-width:0}
+  .mlabel{margin:0;font-size:10.5px;letter-spacing:.22em;color:var(--accent);font-weight:800}
+  .mname{margin:1px 0 0;font-size:22px;font-weight:900;letter-spacing:-.02em;line-height:1.15}
+  .mline{margin:2px 0 0;font-size:11.5px;color:var(--muted);line-height:1.5}
+  .mactions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+  .mactions button{
+    flex:1 1 30%;min-height:44px;
+    font:inherit;font-size:12.5px;font-weight:800;
+    color:var(--ink);background:#fff;
+    border:1.5px solid var(--line);border-radius:11px;
+    padding:10px 8px;cursor:pointer;
+  }
+  .mactions button:hover{border-color:var(--ink);background:#fffaf2}
+  .mactions button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 
   .slot{min-height:172px;margin-top:6px}
   .result{
@@ -154,8 +185,9 @@
 
   <button type="button" class="spin" id="spin">まわす</button>
   <p class="status" id="status" aria-live="polite">ボタンを押すと、止まります。</p>
+  <button type="button" class="spin secondary" id="spinAll">朝・昼・夜を同時に回す</button>
 
-  <div class="slot">
+  <div class="slot" id="slot">
     <section class="result" id="result" hidden aria-live="polite">
       <p class="rlabel" id="rlabel">今日の昼は</p>
       <p class="rname" id="rname">カレー</p>
@@ -169,7 +201,40 @@
     </section>
   </div>
 
-  <p class="foot">Spaceキーでも回せます。朝・昼・夜で候補は10個ずつ、全部だいたい同じ確率です。</p>
+  <section class="multi" id="multi" hidden>
+    <p class="mstatus" id="mstatus" aria-live="polite"></p>
+    <div class="mrow">
+      <canvas class="mini" id="mini-asa" role="img" aria-label="朝ごはんのルーレット"></canvas>
+      <div class="mtext">
+        <p class="mlabel">朝</p>
+        <p class="mname" id="mname-asa">—</p>
+        <p class="mline" id="mline-asa">まだ回していません。</p>
+      </div>
+    </div>
+    <div class="mrow">
+      <canvas class="mini" id="mini-hiru" role="img" aria-label="昼ごはんのルーレット"></canvas>
+      <div class="mtext">
+        <p class="mlabel">昼</p>
+        <p class="mname" id="mname-hiru">—</p>
+        <p class="mline" id="mline-hiru">まだ回していません。</p>
+      </div>
+    </div>
+    <div class="mrow">
+      <canvas class="mini" id="mini-yoru" role="img" aria-label="夜ごはんのルーレット"></canvas>
+      <div class="mtext">
+        <p class="mlabel">夜</p>
+        <p class="mname" id="mname-yoru">—</p>
+        <p class="mline" id="mline-yoru">まだ回していません。</p>
+      </div>
+    </div>
+    <div class="mactions">
+      <button type="button" id="copy3">3つともコピー</button>
+      <button type="button" id="tweet3">Xでシェア</button>
+      <button type="button" id="back1">1つだけ回す</button>
+    </div>
+  </section>
+
+  <p class="foot">Spaceキーでも回せます。1つずつでも、朝・昼・夜を同時でも。候補は10個ずつです。</p>
 </main>
 
 <script>
@@ -264,6 +329,14 @@
   var tweet = document.getElementById("tweet");
   var again = document.getElementById("again");
   var copyBtn = document.getElementById("copy");
+  var spinAll = document.getElementById("spinAll");
+  var multiEl = document.getElementById("multi");
+  var mstatus = document.getElementById("mstatus");
+  var slotEl = document.getElementById("slot");
+  var mealsEl = document.querySelector(".meals");
+  var copy3 = document.getElementById("copy3");
+  var tweet3 = document.getElementById("tweet3");
+  var back1 = document.getElementById("back1");
 
   var size = 400;
   var R = 180;
@@ -275,6 +348,25 @@
   var state = "idle";
   var reduce = false;
   var lastPick = null;
+  var minis = ORDER.map(function (key) {
+    var c = document.getElementById("mini-" + key);
+    return {
+      key: key,
+      canvas: c,
+      ctx: c.getContext("2d"),
+      items: MEALS[key].items,
+      seg: TAU / MEALS[key].items.length,
+      rot: -Math.PI / 3,
+      v: 0,
+      size: 104,
+      R: 44,
+      dpr: 1,
+      done: true,
+      index: 0,
+      elName: document.getElementById("mname-" + key),
+      elLine: document.getElementById("mline-" + key)
+    };
+  });
 
   try { reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) { reduce = false; }
 
@@ -341,6 +433,7 @@
 
   function resize() {
     var rect = wrap.getBoundingClientRect();
+    if (rect.width < 50) return;
     size = Math.max(220, Math.round(rect.width));
     dpr = Math.min(2, window.devicePixelRatio || 1);
     canvas.width = Math.round(size * dpr);
@@ -394,6 +487,7 @@
     if (state !== "idle") return;
     state = "spinning";
     spinBtn.disabled = true;
+    spinAll.disabled = true;
     for (var i = 0; i < tabs.length; i++) tabs[i].disabled = true;
     result.hidden = true;
     feedback.textContent = "";
@@ -448,6 +542,7 @@
     var m = MEALS[current];
     state = "idle";
     spinBtn.disabled = false;
+    spinAll.disabled = false;
     for (var i = 0; i < tabs.length; i++) tabs[i].disabled = false;
     spinBtn.textContent = "もう一回まわす";
     lastPick = item;
@@ -478,8 +573,182 @@
     window.setTimeout(function () { confetti.textContent = ""; }, 2800);
   }
 
+  function setMode(multiOn) {
+    wrap.hidden = multiOn;
+    spinBtn.hidden = multiOn;
+    spinAll.hidden = multiOn;
+    status.hidden = multiOn;
+    slotEl.hidden = multiOn;
+    mealsEl.hidden = multiOn;
+    multiEl.hidden = !multiOn;
+    if (multiOn) setupMinis();
+  }
+
+  function setupMinis() {
+    for (var i = 0; i < minis.length; i++) {
+      var m = minis[i];
+      var rect = m.canvas.getBoundingClientRect();
+      var s = Math.max(84, Math.round(rect.width || 104));
+      var d = Math.min(2, window.devicePixelRatio || 1);
+      m.size = s;
+      m.dpr = d;
+      m.R = s / 2 - 8;
+      m.canvas.width = Math.round(s * d);
+      m.canvas.height = Math.round(s * d);
+      drawMini(m);
+    }
+  }
+
+  function drawMini(m) {
+    var c = m.ctx, s = m.size, r = m.R;
+    c.setTransform(m.dpr, 0, 0, m.dpr, 0, 0);
+    c.clearRect(0, 0, s, s);
+    c.save();
+    c.translate(s / 2, s / 2);
+    c.rotate(m.rot);
+    for (var i = 0; i < m.items.length; i++) {
+      var a0 = i * m.seg;
+      var a1 = a0 + m.seg;
+      c.beginPath();
+      c.moveTo(0, 0);
+      c.arc(0, 0, r, a0, a1);
+      c.closePath();
+      c.fillStyle = m.items[i].color;
+      c.fill();
+      c.lineWidth = 1;
+      c.strokeStyle = "rgba(255,248,238,.6)";
+      c.stroke();
+    }
+    c.restore();
+
+    c.beginPath();
+    c.arc(s / 2, s / 2, r * 0.24, 0, TAU);
+    c.fillStyle = "#fffdf7";
+    c.fill();
+    c.lineWidth = 2;
+    c.strokeStyle = "#241f1a";
+    c.stroke();
+
+    c.beginPath();
+    c.arc(s / 2, s / 2, r, 0, TAU);
+    c.lineWidth = 3;
+    c.strokeStyle = "#241f1a";
+    c.stroke();
+
+    c.beginPath();
+    c.moveTo(s / 2 - 7, 0);
+    c.lineTo(s / 2 + 7, 0);
+    c.lineTo(s / 2, 12);
+    c.closePath();
+    c.fillStyle = "#241f1a";
+    c.fill();
+  }
+
+  function startMulti() {
+    if (state !== "idle") return;
+    state = "multi";
+    setMode(true);
+    mstatus.textContent = "3つ同時に、回しています…";
+    copy3.disabled = true;
+    tweet3.disabled = true;
+    back1.disabled = true;
+    for (var i = 0; i < minis.length; i++) {
+      var m = minis[i];
+      m.done = false;
+      m.index = Math.floor(Math.random() * m.items.length);
+      m.elName.textContent = "…";
+      m.elLine.textContent = "回しています";
+      m.rot = m.rot % TAU;
+      m.v = reduce ? 6 : 11 + Math.random() * 5;
+    }
+    last = performance.now();
+    raf = requestAnimationFrame(multiTick);
+  }
+
+  function multiTick(now) {
+    var dt = Math.min(0.045, Math.max(0, (now - last) / 1000));
+    last = now;
+    var pending = false;
+    for (var i = 0; i < minis.length; i++) {
+      var m = minis[i];
+      if (m.done) continue;
+      m.rot += m.v * dt;
+      m.v -= (reduce ? 9 : 3.6) * dt;
+      if (m.v <= 0.35) {
+        snapMini(m);
+        m.done = true;
+        var item = m.items[m.index];
+        m.elName.textContent = item.name;
+        m.elLine.textContent = item.line;
+      } else {
+        pending = true;
+        drawMini(m);
+        if (Math.random() < 0.3) {
+          m.elName.textContent = m.items[Math.floor(Math.random() * m.items.length)].name;
+        }
+      }
+    }
+    if (pending) {
+      raf = requestAnimationFrame(multiTick);
+    } else {
+      finishMulti();
+    }
+  }
+
+  function snapMini(m) {
+    var target = -Math.PI / 2 - (m.index + 0.5) * m.seg;
+    var k = Math.ceil((m.rot - target) / TAU);
+    target += k * TAU;
+    if (target <= m.rot) target += TAU;
+    m.rot = target;
+    drawMini(m);
+  }
+
+  function finishMulti() {
+    state = "idle";
+    mstatus.textContent = "3つとも決まりました。";
+    copy3.disabled = false;
+    tweet3.disabled = false;
+    back1.disabled = false;
+  }
+
+  function multiText() {
+    var parts = [];
+    for (var i = 0; i < minis.length; i++) {
+      var m = minis[i];
+      parts.push(MEALS[m.key].label + "は「" + m.items[m.index].name + "」");
+    }
+    return "【朝昼晩ルーレット】" + parts.join("、") + "。";
+  }
+
   spinBtn.addEventListener("click", startSpin);
+  spinAll.addEventListener("click", startMulti);
   again.addEventListener("click", startSpin);
+
+  back1.addEventListener("click", function () {
+    if (state !== "idle") return;
+    setMode(false);
+    setMeal(current, false);
+    spinAll.focus();
+  });
+
+  copy3.addEventListener("click", function () {
+    var lines = ["【朝昼晩ルーレット】"];
+    for (var i = 0; i < minis.length; i++) {
+      var m = minis[i];
+      lines.push(MEALS[m.key].label + "：" + m.items[m.index].name);
+    }
+    lines.push(URL);
+    copyText(lines.join("\n")).then(function (ok) {
+      mstatus.textContent = ok ? "3つともコピーしました。" : "コピーできませんでした。";
+    });
+  });
+
+  tweet3.addEventListener("click", function () {
+    var u = "https://twitter.com/intent/tweet?text=" + encodeURIComponent(multiText()) +
+      "&url=" + encodeURIComponent(URL);
+    window.open(u, "_blank", "noopener");
+  });
 
   copyBtn.addEventListener("click", function () {
     if (!lastPick) return;
