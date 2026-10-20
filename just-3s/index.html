@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>3秒ジャスト | 体内時計ミリ秒テスト</title>
+<meta name="description" content="目を閉じて3.00秒。体内時計の誤差をミリ秒で採点する1ボタンゲーム。">
+<meta property="og:title" content="3秒ジャスト | 体内時計ミリ秒テスト">
+<meta property="og:description" content="3.00秒ぴったりで止めろ。あなたの体内時計は何ミリ秒ズレている?">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#07070b">
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  :root{
+    --bg:#07070b; --ink:#f3f5fa; --dim:#8b91a3; --line:#1e2233;
+    --accent:#7cf7d0; --warm:#ffd479;
+  }
+  html,body{height:100%}
+  body{
+    margin:0; background:
+      radial-gradient(900px 600px at 50% -10%, #16203a 0%, transparent 60%),
+      radial-gradient(700px 500px at 90% 110%, #241a2e 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font:16px/1.6 system-ui,-apple-system,"Segoe UI","Hiragino Sans","Noto Sans JP",sans-serif;
+    display:flex; justify-content:center;
+    padding:max(18px,env(safe-area-inset-top)) 18px max(18px,env(safe-area-inset-bottom));
+    overflow:hidden;
+  }
+  .wrap{width:100%;max-width:480px;min-height:100%;display:flex;flex-direction:column;align-items:center;gap:10px}
+  header{width:100%;display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding-top:4px}
+  .brand{font-size:14px;letter-spacing:.18em;color:var(--dim)}
+  .brand b{color:var(--ink);letter-spacing:.06em}
+  .best{font-size:12px;color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:3px 10px;white-space:nowrap}
+  .best b{color:var(--accent);font-variant-numeric:tabular-nums}
+
+  .stage{position:relative;flex:1;width:100%;display:grid;place-items:center;min-height:380px}
+  .panel{grid-area:1/1;width:100%;display:flex;flex-direction:column;align-items:center;gap:14px;
+         opacity:0;visibility:hidden;transform:translateY(8px);transition:opacity .22s ease,transform .22s ease,visibility .22s}
+  .panel.on{opacity:1;visibility:visible;transform:none}
+
+  .dial{position:relative;width:250px;height:250px;display:grid;place-items:center}
+  .dial::before{
+    content:"";position:absolute;inset:0;border-radius:50%;
+    border:1px solid var(--line);
+    background:radial-gradient(circle at 50% 50%, #101426 0%, #0a0b12 70%);
+  }
+  .dial::after{
+    content:"";position:absolute;inset:-6px;border-radius:50%;
+    border:1px solid transparent;
+    background:conic-gradient(from -90deg, var(--accent), transparent 35%, transparent 65%, var(--warm)) border-box;
+    -webkit-mask:linear-gradient(#000 0 0) padding-box,linear-gradient(#000 0 0);
+    -webkit-mask-composite:xor;mask-composite:exclude;
+    opacity:.28;transition:opacity .3s;
+  }
+  body.running .dial::after{opacity:.9;animation:spin 7s linear infinite}
+  body.running .dial::before{animation:breathe 1.4s ease-in-out infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes breathe{0%,100%{box-shadow:0 0 0 0 rgba(124,247,208,.0)}50%{box-shadow:0 0 60px 6px rgba(124,247,208,.16)}}
+
+  button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;touch-action:manipulation}
+  .go{
+    width:170px;height:170px;border-radius:50%;
+    display:grid;place-items:center;gap:2px;
+    background:radial-gradient(circle at 50% 30%, #1a2a3f 0%, #0d1220 75%);
+    border:1px solid #2a3550;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 18px 50px -18px rgba(0,0,0,.9);
+    transition:transform .08s ease,border-color .2s;
+  }
+  .go:active{transform:scale(.97)}
+  .go:focus-visible{outline:2px solid var(--accent);outline-offset:6px}
+  .go .big{font-size:26px;font-weight:700;letter-spacing:.04em}
+  .go .sub{font-size:11px;color:var(--dim);letter-spacing:.12em}
+  body.running .go{border-color:var(--accent);box-shadow:0 0 40px -6px rgba(124,247,208,.5),inset 0 0 30px rgba(124,247,208,.08)}
+  body.running .go .big{color:var(--accent)}
+
+  h1{font-size:15px;font-weight:600;letter-spacing:.02em;margin:0;color:var(--ink)}
+  .lead{margin:0;color:var(--dim);font-size:13px;text-align:center}
+  .hint{font-size:12px;color:#6f7688;letter-spacing:.04em;text-align:center;min-height:18px}
+
+  .err{font-size:56px;font-weight:800;line-height:1;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+  .err small{font-size:18px;font-weight:600;color:var(--dim);margin-left:4px;letter-spacing:0}
+  .verdict{font-size:13px;color:var(--dim)}
+  .rank{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:999px;padding:6px 16px 6px 8px;background:#0e111c}
+  .rank .g{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:16px;color:#07070b;background:var(--accent)}
+  .rank .n{font-size:14px;font-weight:600}
+
+  .scale{position:relative;width:100%;max-width:320px;height:34px;margin-top:2px}
+  .scale .bar{position:absolute;top:14px;left:0;right:0;height:6px;border-radius:3px;
+    background:linear-gradient(90deg,#3b4260,var(--accent) 48%,var(--accent) 52%,#ffd479)}
+  .scale .mid{position:absolute;top:6px;left:50%;width:1px;height:22px;background:#2a3048}
+  .scale .pin{position:absolute;top:8px;width:14px;height:14px;margin-left:-7px;border-radius:50%;
+    background:#fff;box-shadow:0 0 0 4px rgba(255,255,255,.12);transition:left .5s cubic-bezier(.2,.9,.2,1)}
+  .scale .lbl{position:absolute;top:24px;font-size:10px;color:#666d80}
+  .scale .lbl.l{left:0}.scale .lbl.r{right:0}
+
+  .row{display:flex;gap:10px;width:100%;max-width:340px}
+  .btn{flex:1;padding:13px 10px;border-radius:12px;border:1px solid var(--line);background:#10141f;font-size:14px;font-weight:600;transition:.15s}
+  .btn:hover{border-color:#38415c}
+  .btn.primary{background:var(--accent);color:#06130f;border-color:transparent}
+  .btn:active{transform:translateY(1px)}
+
+  .toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,16px);background:#f3f5fa;color:#07070b;
+    padding:9px 16px;border-radius:999px;font-size:13px;font-weight:700;opacity:0;pointer-events:none;transition:.2s}
+  .toast.on{opacity:1;transform:translate(-50%,0)}
+  footer{font-size:11px;color:#565d6e;padding-bottom:2px}
+  @media (max-height:620px){.dial{width:200px;height:200px}.go{width:140px;height:140px}.stage{min-height:300px}}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">3<b>秒</b>ジャスト</div>
+    <div class="best" id="best">ベスト —</div>
+  </header>
+
+  <div class="stage">
+    <section class="panel on" id="pIdle">
+      <div class="dial">
+        <button class="go" id="startBtn" aria-label="スタート">
+          <span class="big">スタート</span>
+          <span class="sub">TAP / SPACE</span>
+        </button>
+      </div>
+      <h1>3.00秒ぴったりで止めろ</h1>
+      <p class="lead">画面に時計は出ません。頼りは体内時計だけ。</p>
+      <p class="hint">スペースキーでもスタート</p>
+    </section>
+
+    <section class="panel" id="pRun">
+      <div class="dial">
+        <button class="go" id="stopBtn" aria-label="ストップ">
+          <span class="big">止まれ</span>
+          <span class="sub">TAP / SPACE</span>
+        </button>
+      </div>
+      <h1>3.00秒だと思った瞬間に</h1>
+      <p class="hint">6秒を過ぎると自動で計測終了</p>
+    </section>
+
+    <section class="panel" id="pResult" aria-live="polite">
+      <div class="err" id="errText">±0<small>秒</small></div>
+      <div class="verdict" id="verdict">ちょうどでした</div>
+      <div class="rank"><span class="g" id="grade">S</span><span class="n" id="rankName">原子時計</span></div>
+      <div class="scale">
+        <div class="bar"></div><div class="mid"></div>
+        <div class="pin" id="pin" style="left:50%"></div>
+        <span class="lbl l">早い</span><span class="lbl r">遅い</span>
+      </div>
+      <div class="row">
+        <button class="btn primary" id="againBtn">もう一回</button>
+        <button class="btn" id="shareBtn">結果をコピー</button>
+      </div>
+      <p class="hint" id="streak"></p>
+    </section>
+  </div>
+
+  <footer>時計を見ずに、感覚だけで。</footer>
+</div>
+<div class="toast" id="toast">コピーした</div>
+
+<script>
+(function () {
+  var TARGET = 3000;
+  var LIMIT = 6000;
+  var KEY = 'just3s.best';
+  var COUNT = 'just3s.count';
+
+  var body = document.body;
+  var panels = { idle: document.getElementById('pIdle'), run: document.getElementById('pRun'), result: document.getElementById('pResult') };
+  var startBtn = document.getElementById('startBtn');
+  var stopBtn = document.getElementById('stopBtn');
+  var againBtn = document.getElementById('againBtn');
+  var shareBtn = document.getElementById('shareBtn');
+  var bestEl = document.getElementById('best');
+  var errText = document.getElementById('errText');
+  var verdict = document.getElementById('verdict');
+  var gradeEl = document.getElementById('grade');
+  var rankName = document.getElementById('rankName');
+  var pin = document.getElementById('pin');
+  var streakEl = document.getElementById('streak');
+  var toast = document.getElementById('toast');
+
+  var state = 'idle';
+  var startAt = 0;
+  var autoTimer = 0;
+  var last = null;
+
+  var RANKS = [
+    { max: 10,  g: 'S', name: '原子時計',       color: '#ffd479' },
+    { max: 30,  g: 'A', name: 'GPS衛星',        color: '#7cf7d0' },
+    { max: 60,  g: 'B', name: '鉄道時計',       color: '#8ec5ff' },
+    { max: 100, g: 'C', name: '目覚まし時計',   color: '#c3b6ff' },
+    { max: 200, g: 'D', name: '砂時計',         color: '#ffb3a7' },
+    { max: 1e9, g: 'E', name: '日時計',         color: '#ff8f8f' }
+  ];
+
+  function store(key, val) { try { localStorage.setItem(key, String(val)); } catch (e) {} }
+  function load(key) { try { var v = localStorage.getItem(key); return v === null ? null : Number(v); } catch (e) { return null; } }
+
+  function fmtMs(ms) {
+    var a = Math.abs(ms);
+    return a < 10 ? a.toFixed(1) : String(Math.round(a));
+  }
+  function fmtSec(ms) {
+    return (Math.abs(ms) / 1000).toFixed(3);
+  }
+
+  function show(name) {
+    state = name;
+    body.classList.toggle('running', name === 'run');
+    for (var k in panels) panels[k].classList.toggle('on', k === name);
+    startBtn.blur(); stopBtn.blur();
+  }
+
+  function renderBest() {
+    var b = load(KEY);
+    bestEl.innerHTML = b === null ? 'ベスト —' : 'ベスト <b>±' + fmtMs(b) + 'ms</b>';
+  }
+
+  function buzz(ms) { if (navigator.vibrate) { try { navigator.vibrate(ms); } catch (e) {} } }
+
+  function begin() {
+    if (state === 'run') return;
+    startAt = performance.now();
+    show('run');
+    buzz(12);
+    clearTimeout(autoTimer);
+    autoTimer = setTimeout(function () { finish(true); }, LIMIT + 30);
+  }
+
+  function finish(auto) {
+    if (state !== 'run') return;
+    clearTimeout(autoTimer);
+    var elapsed = performance.now() - startAt;
+    var autoHit = auto || elapsed > LIMIT;
+    var diff = Math.round(elapsed - TARGET);
+
+    var abs = Math.abs(diff);
+    var rank = RANKS[RANKS.length - 1];
+    for (var i = 0; i < RANKS.length; i++) { if (abs <= RANKS[i].max) { rank = RANKS[i]; break; } }
+
+    if (autoHit) { diff = LIMIT - TARGET; abs = Math.abs(diff); rank = RANKS[RANKS.length - 1]; }
+
+    errText.innerHTML = (diff > 0 ? '+' : diff < 0 ? '−' : '±') + fmtSec(diff) + '<small>秒</small>';
+    gradeEl.textContent = rank.g;
+    gradeEl.style.background = rank.color;
+    rankName.textContent = rank.name;
+    verdict.textContent = autoHit ? '6秒経過、寝坊しました' : abs <= 3 ? 'ほぼ完璧。怖い。' : diff > 0 ? fmtMs(diff) + 'ms 遅い' : fmtMs(diff) + 'ms 早い';
+
+    var pos = 50 + Math.max(-1, Math.min(1, diff / 300)) * 46;
+    pin.style.left = pos + '%';
+    pin.style.background = rank.color;
+
+    var best = load(KEY);
+    var count = (load(COUNT) || 0) + 1;
+    store(COUNT, count);
+    var isBest = best === null || abs < best;
+    if (isBest && !autoHit) { store(KEY, abs); }
+    renderBest();
+
+    if (autoHit) {
+      streakEl.textContent = '挑戦 ' + count + ' 回目';
+    } else if (isBest) {
+      streakEl.textContent = '自己ベスト更新! 挑戦 ' + count + ' 回目';
+    } else {
+      streakEl.textContent = 'ベスト ±' + fmtMs(best) + 'ms ・ 挑戦 ' + count + ' 回目';
+    }
+
+    last = { diff: diff, abs: abs, rank: rank, auto: autoHit, count: count, best: isBest };
+    errText.style.color = rank.color;
+    show('result');
+    buzz(autoHit ? 0 : 18);
+  }
+
+  function shareText() {
+    if (!last) return '';
+    var r = last;
+    var line = r.auto
+      ? '【3秒ジャスト】6秒過ぎて寝坊。判定は「' + r.rank.name + '」'
+      : '【3秒ジャスト】誤差 ' + (r.diff > 0 ? '+' : '−') + fmtSec(r.diff) + '秒 / 判定「' + r.rank.name + '」' + r.rank.g;
+    return line + '\n体内時計、何ミリ秒ズレてる?\n' + location.href + '\n#3秒ジャスト';
+  }
+
+  function copy(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).then(function () { return true; }, function () { return legacyCopy(text); });
+    }
+    return Promise.resolve(legacyCopy(text));
+  }
+
+  function legacyCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) {}
+    document.body.removeChild(ta);
+    return ok;
+  }
+
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add('on');
+    setTimeout(function () { toast.classList.remove('on'); }, 1400);
+  }
+
+  startBtn.addEventListener('pointerdown', function (e) { e.preventDefault(); begin(); });
+  stopBtn.addEventListener('pointerdown', function (e) { e.preventDefault(); finish(false); });
+  againBtn.addEventListener('click', begin);
+
+  shareBtn.addEventListener('click', function () {
+    var text = shareText();
+    if (!text) return;
+    var done = function (ok) { showToast(ok ? 'コピーした' : 'コピーできませんでした'); };
+    if (navigator.share) {
+      navigator.share({ text: text }).then(function () { done(true); }, function () { copy(text).then(done); });
+      return;
+    }
+    copy(text).then(done);
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.repeat) return;
+    var key = e.key;
+    if (key !== ' ' && key !== 'Enter' && key !== 'Spacebar') return;
+    if (state === 'run') { e.preventDefault(); finish(false); }
+    else if (state === 'idle' || state === 'result') { e.preventDefault(); begin(); }
+  });
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden && state === 'run') { clearTimeout(autoTimer); finish(false); }
+  });
+
+  renderBest();
+  show('idle');
+})();
+</script>
+</body>
+</html>
