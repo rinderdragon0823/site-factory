@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>3秒クイズ — 考えるより、反射で答えろ。</title>
+<meta name="description" content="1問3秒の4択クイズ全10問。正解数と称号が出ます。あなたは3秒で何問答えられる?">
+<meta property="og:title" content="3秒クイズ — 考えるより、反射で答えろ。">
+<meta property="og:description" content="1問3秒の4択クイズ、全10問。考える時間はありません。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/sanbyo-quiz/">
+<meta property="og:site_name" content="3秒クイズ">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#fff8e6">
+<style>
+  :root{
+    --paper:#fff8e6;
+    --ink:#191713;
+    --muted:#7d7361;
+    --yellow:#ffd23f;
+    --red:#e63946;
+    --green:#2a9d5c;
+    --line:rgba(25,23,19,.16);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 500px at 100% -10%, #fff0b8 0%, transparent 60%),
+      radial-gradient(700px 420px at -10% 110%, #f2f6e6 0%, transparent 55%),
+      var(--paper);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+  }
+  .wrap{max-width:640px;margin:auto;width:100%;padding:18px 16px calc(26px + env(safe-area-inset-bottom))}
+  .kicker{margin:0;font-size:10px;letter-spacing:.3em;color:var(--red);font-weight:800}
+  h1{margin:.24em 0 .08em;font-size:clamp(1.9rem,7.4vw,2.6rem);letter-spacing:-.03em;line-height:1.05}
+  .lead{margin:0 0 12px;font-size:12.5px;color:var(--muted)}
+
+  .card{
+    background:#fffdf7;
+    border:2px solid var(--ink);
+    border-radius:18px;
+    box-shadow:6px 6px 0 var(--ink);
+    padding:20px;
+  }
+  .meta{display:flex;justify-content:space-between;align-items:baseline;font-size:11px;font-weight:800;letter-spacing:.14em;color:var(--muted)}
+  .meta #score{color:var(--ink);font-size:13px;letter-spacing:.04em}
+  .timer{height:8px;border-radius:99px;background:rgba(25,23,19,.1);margin:8px 0 14px;overflow:hidden}
+  .timer i{display:block;height:100%;width:100%;background:var(--red);border-radius:99px;transform-origin:left center}
+  .timer i.calm{background:var(--green)}
+  h2{margin:0 0 16px;font-size:clamp(1.3rem,5.2vw,1.7rem);line-height:1.5;min-height:2.5em;letter-spacing:-.005em}
+  .choices{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  @media (max-width:360px){.choices{grid-template-columns:1fr}}
+  .choices button{
+    position:relative;text-align:left;
+    font:inherit;font-size:clamp(1rem,4vw,1.1rem);font-weight:700;line-height:1.4;
+    color:var(--ink);background:#fff;
+    border:1.5px solid var(--ink);border-radius:12px;
+    padding:15px 14px 15px 38px;min-height:72px;cursor:pointer;
+    transition:background .12s,transform .08s,color .12s;
+  }
+  .choices button .k{
+    position:absolute;left:9px;top:50%;transform:translateY(-50%);
+    width:19px;height:19px;border-radius:6px;
+    display:flex;align-items:center;justify-content:center;
+    font-size:10px;font-weight:800;
+    background:rgba(25,23,19,.08);color:var(--muted);
+  }
+  .choices button:hover:not(:disabled){background:#fff7d9;transform:translateY(-1px)}
+  .choices button:focus-visible{outline:3px solid var(--red);outline-offset:2px}
+  .choices button:disabled{cursor:default}
+  .choices button.ok{background:#e6f7ec;border-color:var(--green);color:#145c34}
+  .choices button.ok .k{background:var(--green);color:#fff}
+  .choices button.ng{background:#fdecee;border-color:var(--red);color:#8c1d27}
+  .choices button.ng .k{background:var(--red);color:#fff}
+  .note{margin:12px 0 0;font-size:11.5px;color:var(--muted);min-height:1.5em;line-height:1.5}
+  .note b{color:var(--ink)}
+
+  .result{background:#fffdf7;border:2px solid var(--ink);border-radius:18px;box-shadow:6px 6px 0 var(--ink);padding:22px 18px;text-align:center}
+  .result .kicker{color:var(--muted)}
+  .big{font-size:clamp(3rem,16vw,4.2rem);font-weight:900;line-height:1;margin:6px 0 2px;letter-spacing:-.04em}
+  .big small{font-size:.34em;color:var(--muted);font-weight:800;letter-spacing:0}
+  .rank{margin:4px 0 0;font-size:14px;font-weight:800}
+  .rank b{background:linear-gradient(transparent 62%, var(--yellow) 62%);padding:0 2px}
+  .rdesc{margin:8px 0 0;font-size:12px;color:var(--muted);line-height:1.6}
+  .ractions{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+  .ractions button,.ractions a{
+    flex:1 1 40%;min-height:46px;
+    display:inline-flex;align-items:center;justify-content:center;
+    font:inherit;font-size:13px;font-weight:800;text-decoration:none;
+    color:var(--ink);background:#fff;border:1.5px solid var(--line);border-radius:11px;
+    padding:10px;cursor:pointer;transition:border-color .15s,background .15s;
+  }
+  .ractions button:hover,.ractions a:hover{border-color:var(--ink);background:#fffaf0}
+  .ractions .again{flex:1 1 100%;background:var(--yellow);border:2px solid var(--ink);box-shadow:3px 3px 0 var(--ink)}
+  .ractions .again:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+  .ractions button:focus-visible,.ractions a:focus-visible{outline:3px solid var(--red);outline-offset:2px}
+  .feedback{margin:10px 0 0;font-size:11.5px;color:var(--green);min-height:1.3em}
+  .hint{margin-top:12px;font-size:10.5px;color:var(--muted);line-height:1.7}
+  .hint b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <p class="kicker">3 SECOND QUIZ</p>
+  <h1>3秒クイズ</h1>
+  <p class="lead">1問3秒、全10問。考える時間はありません。</p>
+
+  <section class="card" id="card" aria-labelledby="qtext">
+    <div class="meta"><span id="progress">Q1 / 10</span><span id="score">0 点</span></div>
+    <div class="timer" aria-hidden="true"><i id="bar"></i></div>
+    <h2 id="qtext">…</h2>
+    <div class="choices" id="choices"></div>
+    <p class="note" id="note" aria-live="polite"></p>
+  </section>
+
+  <section class="result" id="result" hidden aria-live="polite">
+    <p class="kicker">RESULT</p>
+    <p class="big"><span id="finalScore">0</span><small> / 10</small></p>
+    <p class="rank">称号：<b id="rank">…</b></p>
+    <p class="rdesc" id="rdesc">…</p>
+    <div class="ractions">
+      <button type="button" class="again" id="again">もう一回</button>
+      <button type="button" id="copy">結果をコピー</button>
+      <a id="tweet" href="#" target="_blank" rel="noopener">Xでシェア</a>
+    </div>
+    <p class="feedback" id="feedback" aria-live="polite"></p>
+  </section>
+
+  <p class="hint">キーボードでも遊べます：<b>1〜4</b>で回答。<b>Enter</b>でもう一回。</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var URL = "https://rinderdragon0823.github.io/site-factory/sanbyo-quiz/";
+  var LIMIT = 3.0;
+
+  var QUESTIONS = [
+    { q: "富士山の高さは?", a: "3,776m", c: ["3,776m", "3,676m", "3,876m", "3,576m"], note: "3,776m。日本でいちばん高い山です。" },
+    { q: "東京スカイツリーの高さは?", a: "634m", c: ["634m", "643m", "600m", "666m"], note: "634m。むさし（6・3・4）の語呂合わせです。" },
+    { q: "日本の都道府県の数は?", a: "47", c: ["43", "45", "47", "49"], note: "47都道府県。1都1道2府43県です。" },
+    { q: "1ダースは何本?", a: "12本", c: ["6本", "10本", "12本", "24本"], note: "12本。half a dozen は6本です。" },
+    { q: "地球の衛星は?", a: "月", c: ["月", "火星", "金星", "太陽"], note: "月。地球の自然衛星は1つだけです。" },
+    { q: "オリンピックは何年ごと?", a: "4年", c: ["2年", "3年", "4年", "5年"], note: "4年に1度。夏季と冬季が交互にあります。" },
+    { q: "ふつうの1年は何日?", a: "365日", c: ["360日", "364日", "365日", "366日"], note: "365日。うるう年だけ366日です。" },
+    { q: "信号機の3色は?", a: "青・黄・赤", c: ["青・黄・赤", "青・黄・緑", "赤・黄・白", "青・赤・紫"], note: "青・黄・赤。進め・注意・止まれ、です。" },
+    { q: "1週間は何日?", a: "7日", c: ["5日", "6日", "7日", "8日"], note: "7日。週末は2日だけです。" },
+    { q: "日本でいちばん長い川は?", a: "信濃川", c: ["信濃川", "利根川", "石川", "淀川"], note: "信濃川。長さは約367kmです。" }
+  ];
+
+  var card = document.getElementById("card");
+  var result = document.getElementById("result");
+  var qtext = document.getElementById("qtext");
+  var choices = document.getElementById("choices");
+  var progress = document.getElementById("progress");
+  var scoreEl = document.getElementById("score");
+  var bar = document.getElementById("bar");
+  var note = document.getElementById("note");
+  var finalScore = document.getElementById("finalScore");
+  var rankEl = document.getElementById("rank");
+  var rdesc = document.getElementById("rdesc");
+  var feedback = document.getElementById("feedback");
+  var tweet = document.getElementById("tweet");
+
+  var idx = 0;
+  var score = 0;
+  var state = "idle";
+  var qStart = 0;
+  var timerId = 0;
+  var advanceId = 0;
+  var current = null;
+  var currentChoices = [];
+
+  function shuffle(list) {
+    var a = list.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+
+  function rankFor(s) {
+    if (s === 10) return { t: "3秒の達人", d: "全問正解。もはや反射です。" };
+    if (s >= 8) return { t: "知識と反射の両刀", d: "あと少しで全問。3秒でも足りています。" };
+    if (s >= 6) return { t: "ふつうの人", d: "半分より上。悪くない反射です。" };
+    if (s >= 4) return { t: "考える派", d: "3秒は、考える人には短すぎました。" };
+    return { t: "今日はゆっくり行こう", d: "次はきっと当たります。たぶん。" };
+  }
+
+  function start() {
+    window.clearTimeout(advanceId);
+    idx = 0;
+    score = 0;
+    state = "question";
+    result.hidden = true;
+    card.hidden = false;
+    feedback.textContent = "";
+    showQuestion();
+  }
+
+  function showQuestion() {
+    current = QUESTIONS[idx];
+    currentChoices = shuffle(current.c);
+    qtext.textContent = current.q;
+    progress.textContent = "Q" + (idx + 1) + " / " + QUESTIONS.length;
+    scoreEl.textContent = score + " 点";
+    note.textContent = "";
+    choices.textContent = "";
+
+    currentChoices.forEach(function (label, i) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.dataset.label = label;
+      var k = document.createElement("span");
+      k.className = "k";
+      k.textContent = String(i + 1);
+      b.appendChild(k);
+      b.appendChild(document.createTextNode(label));
+      b.addEventListener("click", function () { answer(label, b); });
+      choices.appendChild(b);
+    });
+
+    bar.style.transform = "scaleX(1)";
+    bar.classList.remove("calm");
+    qStart = performance.now();
+    state = "question";
+    tick();
+  }
+
+  function tick() {
+    if (state !== "question") return;
+    var p = (performance.now() - qStart) / (LIMIT * 1000);
+    var left = Math.max(0, 1 - p);
+    bar.style.transform = "scaleX(" + left.toFixed(4) + ")";
+    bar.classList.toggle("calm", left > 0.5);
+    if (left <= 0) {
+      timeout();
+      return;
+    }
+    timerId = requestAnimationFrame(tick);
+  }
+
+  function markButtons(picked) {
+    var kids = choices.querySelectorAll("button");
+    kids.forEach(function (b) {
+      b.disabled = true;
+      if (b.dataset.label === current.a) b.classList.add("ok");
+      else if (picked !== null && b.dataset.label === picked) b.classList.add("ng");
+    });
+  }
+
+  function answer(label, btn) {
+    if (state !== "question") return;
+    state = "reveal";
+    cancelAnimationFrame(timerId);
+    bar.style.transform = "scaleX(0)";
+    var ok = label === current.a;
+    if (ok) score++;
+    scoreEl.textContent = score + " 点";
+    markButtons(label);
+    note.innerHTML = (ok ? "正解。" : "はずれ。") + " " + current.note;
+    advanceId = window.setTimeout(next, 760);
+  }
+
+  function timeout() {
+    if (state !== "question") return;
+    state = "reveal";
+    cancelAnimationFrame(timerId);
+    markButtons(null);
+    note.innerHTML = "時間切れ。答えは <b>" + current.a + "</b>。" + current.note;
+    advanceId = window.setTimeout(next, 820);
+  }
+
+  function next() {
+    idx++;
+    if (idx >= QUESTIONS.length) {
+      finish();
+      return;
+    }
+    showQuestion();
+  }
+
+  function finish() {
+    state = "result";
+    card.hidden = true;
+    result.hidden = false;
+    finalScore.textContent = String(score);
+    var r = rankFor(score);
+    rankEl.textContent = r.t;
+    rdesc.textContent = r.d;
+    feedback.textContent = "";
+    var share = "【3秒クイズ】" + score + "/10問正解。称号は「" + r.t + "」。あなたは3秒で答えられる?";
+    tweet.href = "https://twitter.com/intent/tweet?text=" + encodeURIComponent(share) + "&url=" + encodeURIComponent(URL);
+    document.getElementById("again").focus({ preventScroll: true });
+  }
+
+  document.getElementById("again").addEventListener("click", start);
+
+  document.getElementById("copy").addEventListener("click", function () {
+    var r = rankFor(score);
+    var text = "【3秒クイズ】" + score + "/10問正解。称号「" + r.t + "」。\n" + URL;
+    copyText(text).then(function (ok) {
+      feedback.textContent = ok ? "コピーしました。" : "コピーできませんでした。";
+    });
+  });
+
+  function copyText(text) {
+    return new Promise(function (resolve) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () { resolve(true); }, function () { resolve(fallbackCopy(text)); });
+      } else {
+        resolve(fallbackCopy(text));
+      }
+    });
+  }
+
+  function fallbackCopy(text) {
+    try {
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.top = "-1000px";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok;
+    } catch (e) { return false; }
+  }
+
+  document.addEventListener("keydown", function (e) {
+    var tag = (e.target && e.target.tagName) || "";
+    if (tag === "BUTTON" || tag === "A") {
+      if (e.key === " " || e.key === "Enter") return;
+    }
+    if (state === "question" && /^[1-4]$/.test(e.key)) {
+      e.preventDefault();
+      var i = Number(e.key) - 1;
+      var btn = choices.querySelectorAll("button")[i];
+      if (btn) answer(btn.dataset.label, btn);
+      return;
+    }
+    if ((e.key === "Enter" || e.key === " ") && state === "result") {
+      e.preventDefault();
+      start();
+    }
+  });
+
+  start();
+})();
+</script>
+</body>
+</html>
