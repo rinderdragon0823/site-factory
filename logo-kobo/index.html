@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ロゴ工房 — 名前を入れると、ロゴになる。</title>
+<meta name="description" content="名前や屋号を入れるだけで、配色・マーク・レイアウトを自動で組んだロゴが完成。PNGで保存できます。">
+<meta property="og:title" content="ロゴ工房 — 名前を入れると、ロゴになる。">
+<meta property="og:description" content="屋号でも、推しの名前でも。入力するだけでロゴが生まれます。PNG保存つき。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/logo-kobo/">
+<meta property="og:site_name" content="ロゴ工房">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#f7f1e3">
+<style>
+  :root{
+    --paper:#f7f1e3;
+    --ink:#191713;
+    --muted:#857a68;
+    --accent:#e4572e;
+    --line:rgba(25,23,19,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 500px at 100% -10%, #ffe7cf 0%, transparent 60%),
+      radial-gradient(700px 420px at -10% 110%, #e8f0e6 0%, transparent 55%),
+      var(--paper);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+  }
+  .wrap{max-width:700px;margin:auto;width:100%;padding:20px 16px calc(26px + env(safe-area-inset-bottom))}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--accent);font-weight:800}
+  h1{margin:.26em 0 .1em;font-size:clamp(1.8rem,7vw,2.5rem);letter-spacing:-.03em;line-height:1.08}
+  .lead{margin:0 0 14px;font-size:13px;color:var(--muted);line-height:1.65}
+
+  .stage{
+    position:relative;width:100%;
+    max-width:520px;margin:0 auto;
+    aspect-ratio:1/1;
+    border-radius:18px;overflow:hidden;
+    border:2px solid var(--ink);
+    box-shadow:0 16px 36px rgba(25,23,19,.18);
+    background:#fff;
+  }
+  #logo{display:block;width:100%;height:100%}
+  .badge{
+    position:absolute;left:12px;bottom:12px;
+    font-size:9.5px;letter-spacing:.22em;
+    color:rgba(255,255,255,.72);
+    mix-blend-mode:difference;pointer-events:none;
+  }
+
+  .entry{display:flex;gap:8px;margin-top:14px;max-width:520px;margin-left:auto;margin-right:auto}
+  #name{
+    flex:1;min-width:0;
+    font:inherit;font-size:1.15rem;font-weight:800;letter-spacing:.03em;
+    color:var(--ink);background:#fffdf8;
+    border:1.5px solid var(--ink);border-radius:12px;
+    padding:12px 14px;min-height:52px;outline:none;
+  }
+  #name:focus{box-shadow:0 0 0 3px rgba(228,87,46,.22)}
+  #make{
+    flex:0 0 auto;
+    font:inherit;font-size:14px;font-weight:900;
+    color:#fff;background:var(--accent);
+    border:2px solid var(--ink);border-radius:12px;
+    padding:12px 16px;min-height:52px;cursor:pointer;
+    box-shadow:3px 3px 0 var(--ink);
+  }
+  #make:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+  #make:focus-visible,#name:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+
+  .actions{display:flex;gap:8px;margin-top:10px;max-width:520px;margin-left:auto;margin-right:auto;flex-wrap:wrap}
+  .actions button{
+    flex:1 1 45%;min-height:48px;
+    font:inherit;font-size:13.5px;font-weight:800;
+    color:var(--ink);background:#fffdf8;
+    border:1.5px solid var(--line);border-radius:12px;
+    padding:11px 12px;cursor:pointer;
+    transition:border-color .15s,background .15s,transform .08s;
+  }
+  .actions button:hover{border-color:var(--ink);background:#fffaf0}
+  .actions button:active{transform:translateY(1px)}
+  .actions button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+  .actions .png{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+  .actions .png:hover{background:#2b2823}
+
+  .chips{display:flex;gap:7px;flex-wrap:wrap;margin:10px auto 0;max-width:520px}
+  .chips button{
+    font:inherit;font-size:11.5px;font-weight:700;color:var(--muted);
+    background:transparent;border:1px solid var(--line);border-radius:999px;
+    padding:7px 12px;min-height:34px;cursor:pointer;
+  }
+  .chips button:hover{color:var(--ink);border-color:var(--ink)}
+  .chips button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+  .note{margin:12px auto 0;max-width:520px;font-size:11px;color:var(--muted);line-height:1.7;text-align:center}
+  .note b{color:var(--ink)}
+  .status{min-height:1.4em;margin:8px auto 0;max-width:520px;font-size:11.5px;color:var(--accent);text-align:center}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <p class="kicker">LOGO KOBO</p>
+  <h1>ロゴ工房</h1>
+  <p class="lead">名前を入れると、配色・マーク・レイアウトを自動で組んだロゴができます。</p>
+
+  <div class="stage">
+    <canvas id="logo" width="900" height="900" role="img" aria-label="生成されたロゴ"></canvas>
+    <div class="badge">LOGO KOBO</div>
+  </div>
+
+  <div class="entry">
+    <input id="name" type="text" maxlength="12" value="ロゴ" autocomplete="off" spellcheck="false" placeholder="名前・屋号">
+    <button type="button" id="make">つくる</button>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="reroll">別のデザイン</button>
+    <button type="button" class="png" id="save">PNGで保存</button>
+  </div>
+
+  <div class="chips" role="group" aria-label="名前の例">
+    <button type="button" data-word="サイト工房">サイト工房</button>
+    <button type="button" data-word="推し">推し</button>
+    <button type="button" data-word="屋号">屋号</button>
+    <button type="button" data-word="深夜作業部">深夜作業部</button>
+  </div>
+
+  <p class="status" id="status" aria-live="polite"></p>
+  <p class="note">同じ名前なら同じデザイン。<b>別のデザイン</b>を押すたびに、配色とマークが組み替わります。PNGは縦横900pxです。</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var canvas = document.getElementById("logo");
+  var ctx = canvas.getContext("2d");
+  var input = document.getElementById("name");
+  var statusEl = document.getElementById("status");
+
+  var W = 900;
+  var TAU = Math.PI * 2;
+  var FONT = '"Hiragino Sans","Yu Gothic","Noto Sans JP",system-ui,sans-serif';
+
+  var PALETTES = [
+    { bg: "#0e1b33", mark: "#ffd166", accent: "#ef476f", text: "#f8f4e9" },
+    { bg: "#f7f1e3", mark: "#1b1b1b", accent: "#e4572e", text: "#1b1b1b" },
+    { bg: "#103c2e", mark: "#f4e7c5", accent: "#e07a5f", text: "#f4e7c5" },
+    { bg: "#fde8ea", mark: "#b5342a", accent: "#2a6f4e", text: "#2b1b1f" },
+    { bg: "#ffd23f", mark: "#191713", accent: "#e63946", text: "#191713" },
+    { bg: "#e9eff8", mark: "#2f5fb3", accent: "#ff8a5c", text: "#13233d" },
+    { bg: "#191713", mark: "#f2b134", accent: "#8ecae6", text: "#f7f1e3" },
+    { bg: "#eaf4ec", mark: "#2a6f4e", accent: "#d1495b", text: "#173a27" }
+  ];
+
+  var variant = 0;
+  var lastMark = -1;
+  var lastPal = -1;
+  var usedMarks = [];
+  var lastName = null;
+
+  function hash(str) {
+    var h = 2166136261;
+    for (var i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  }
+
+  function mulberry32(a) {
+    return function () {
+      a |= 0;
+      a = (a + 0x6D2B79F5) | 0;
+      var t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function rr(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function drawRings(cx, cy, r, p) {
+    ctx.strokeStyle = p.mark;
+    ctx.lineWidth = r * 0.17;
+    ctx.beginPath();
+    ctx.arc(cx - r * 0.3, cy, r * 0.6, 0, TAU);
+    ctx.stroke();
+    ctx.strokeStyle = p.accent;
+    ctx.beginPath();
+    ctx.arc(cx + r * 0.3, cy, r * 0.6, 0, TAU);
+    ctx.stroke();
+  }
+
+  function drawBars(cx, cy, r, p) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(-Math.PI / 4);
+    ctx.fillStyle = p.mark;
+    for (var i = -1; i <= 1; i++) {
+      rr(-r * 0.62, i * r * 0.42 - r * 0.1, r * 1.24, r * 0.2, r * 0.1);
+      ctx.fill();
+    }
+    ctx.fillStyle = p.accent;
+    rr(-r * 0.62, r * 0.42 - r * 0.1, r * 0.54, r * 0.2, r * 0.1);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawDots(cx, cy, r, p) {
+    var gap = r * 0.46;
+    var dot = r * 0.14;
+    for (var y = -1; y <= 1; y++) {
+      for (var x = -1; x <= 1; x++) {
+        if (x === 1 && y === -1) continue;
+        ctx.fillStyle = (x === 1 && y === 1) ? p.accent : p.mark;
+        ctx.beginPath();
+        ctx.arc(cx + x * gap, cy + y * gap, dot, 0, TAU);
+        ctx.fill();
+      }
+    }
+  }
+
+  function drawArch(cx, cy, r, p) {
+    ctx.strokeStyle = p.mark;
+    ctx.lineWidth = r * 0.22;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.arc(cx, cy + r * 0.28, r * 0.66, Math.PI, TAU);
+    ctx.stroke();
+    ctx.fillStyle = p.accent;
+    ctx.beginPath();
+    ctx.arc(cx, cy + r * 0.28, r * 0.17, 0, TAU);
+    ctx.fill();
+    ctx.lineCap = "butt";
+  }
+
+  function drawDiamond(cx, cy, r, p) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(Math.PI / 4);
+    ctx.fillStyle = p.mark;
+    rr(-r * 0.62, -r * 0.62, r * 1.24, r * 1.24, r * 0.12);
+    ctx.fill();
+    ctx.fillStyle = p.accent;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.24, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawPetals(cx, cy, r, p) {
+    var d = r * 0.32;
+    ctx.fillStyle = p.mark;
+    for (var i = 0; i < 4; i++) {
+      var a = i * Math.PI / 2;
+      ctx.beginPath();
+      ctx.arc(cx + Math.cos(a) * d, cy + Math.sin(a) * d, r * 0.4, 0, TAU);
+      ctx.fill();
+    }
+    ctx.fillStyle = p.accent;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 0.19, 0, TAU);
+    ctx.fill();
+  }
+
+  var MARKS = [drawRings, drawBars, drawDots, drawArch, drawDiamond, drawPetals];
+
+  function fitText(text, maxW, maxSize, minSize) {
+    var size = maxSize;
+    while (size > minSize) {
+      ctx.font = "800 " + size + "px " + FONT;
+      if (ctx.measureText(text).width <= maxW) break;
+      size -= 4;
+    }
+    return size;
+  }
+
+  function draw() {
+    var raw = String(input.value || "").trim();
+    var text = raw || "ロゴ";
+    if (text !== lastName) { usedMarks = []; lastName = text; }
+    var seed = hash(text + "|" + variant);
+    var rnd = mulberry32(seed);
+    var pi = Math.floor(rnd() * PALETTES.length);
+    if (pi === lastPal) pi = (pi + 1 + Math.floor(rnd() * (PALETTES.length - 1))) % PALETTES.length;
+    if (usedMarks.length >= MARKS.length) usedMarks = [];
+    var mi = Math.floor(rnd() * MARKS.length);
+    var guard = 0;
+    while (usedMarks.indexOf(mi) >= 0 && guard < 24) {
+      mi = Math.floor(rnd() * MARKS.length);
+      guard++;
+    }
+    usedMarks.push(mi);
+    lastPal = pi;
+    lastMark = mi;
+    var p = PALETTES[pi];
+    var mark = MARKS[mi];
+    var inline = text.length <= 6 && rnd() > 0.5;
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, W, W);
+    ctx.fillStyle = p.bg;
+    ctx.fillRect(0, 0, W, W);
+
+    ctx.fillStyle = p.accent;
+    ctx.globalAlpha = 0.14;
+    ctx.beginPath();
+    ctx.arc(W * 0.86, W * 0.12, W * 0.3, 0, TAU);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    if (inline) {
+      mark(W * 0.33, W * 0.5, W * 0.19, p);
+      var size = fitText(text, W * 0.4, 150, 54);
+      ctx.fillStyle = p.text;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.font = "800 " + size + "px " + FONT;
+      ctx.fillText(text, W * 0.52, W * 0.5 + size * 0.03);
+
+      ctx.fillStyle = p.accent;
+      ctx.fillRect(W * 0.52, W * 0.5 + size * 0.58, W * 0.16, 8);
+    } else {
+      mark(W * 0.5, W * 0.37, W * 0.2, p);
+      var s2 = fitText(text, W * 0.8, 140, 46);
+      ctx.fillStyle = p.text;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.font = "800 " + s2 + "px " + FONT;
+      ctx.fillText(text, W * 0.5, W * 0.7);
+
+      ctx.fillStyle = p.accent;
+      ctx.fillRect(W * 0.5 - W * 0.1, W * 0.7 + s2 * 0.62, W * 0.2, 8);
+    }
+
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+    canvas.setAttribute("aria-label", "「" + text + "」のロゴ");
+    statusEl.textContent = "";
+  }
+
+  function regen() {
+    draw();
+    statusEl.textContent = "「" + (String(input.value).trim() || "ロゴ") + "」のロゴを作りました。";
+  }
+
+  document.getElementById("make").addEventListener("click", regen);
+  document.getElementById("reroll").addEventListener("click", function () {
+    variant++;
+    draw();
+    statusEl.textContent = "デザインを組み替えました。";
+  });
+
+  input.addEventListener("input", draw);
+  input.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      regen();
+    }
+  });
+
+  document.querySelectorAll(".chips button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      input.value = b.getAttribute("data-word");
+      variant = 0;
+      draw();
+      statusEl.textContent = "「" + input.value + "」のロゴを作りました。";
+    });
+  });
+
+  document.getElementById("save").addEventListener("click", function () {
+    var safe = (String(input.value).trim() || "logo").replace(/[\\/:*?"<>|\s]+/g, "-").slice(0, 24);
+    canvas.toBlob(function (blob) {
+      if (!blob) {
+        statusEl.textContent = "PNGを作れませんでした。";
+        return;
+      }
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "logo-" + safe + ".png";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+      statusEl.textContent = "PNGで保存しました。";
+    }, "image/png");
+  });
+
+  draw();
+})();
+</script>
+</body>
+</html>
