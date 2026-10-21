@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>つつく星 — つつくたび、星が育つ。</title>
+<meta name="description" content="画面をつつくたびに、なにもない星に芽・木・家・灯りが増えていく、眺めて育てるカウンター。">
+<meta property="og:title" content="つつく星 — つつくたび、星が育つ。">
+<meta property="og:description" content="つつくだけで、星に緑と家と灯りが増えていきます。何回つついたか、あとで見せてください。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/tsutsuku-hoshi/">
+<meta property="og:site_name" content="つつく星">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#0c1226">
+<style>
+  :root{
+    --night:#0c1226;
+    --paper:#0c1226;
+    --ink:#f6f1e4;
+    --muted:rgba(246,241,228,.6);
+    --lime:#d9ff5a;
+    --line:rgba(246,241,228,.16);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:var(--night);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:720px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--lime);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.6rem,6vw,2.2rem);letter-spacing:-.02em;line-height:1.1}
+  .count{text-align:right;line-height:1}
+  .count b{font-size:clamp(2rem,9vw,3rem);font-weight:900;letter-spacing:-.04em;font-variant-numeric:tabular-nums}
+  .count span{display:block;font-size:10px;letter-spacing:.18em;color:var(--muted);margin-top:4px}
+
+  .stage{
+    position:relative;margin-top:10px;
+    height:clamp(320px,48vh,520px);
+    border-radius:18px;overflow:hidden;
+    border:1px solid rgba(246,241,228,.14);
+    background:#0a1022;
+    box-shadow:0 18px 50px rgba(0,0,0,.5);
+    -webkit-user-select:none;user-select:none;
+  }
+  #sky{display:block;width:100%;height:100%}
+  .toast{
+    position:absolute;left:50%;top:16px;transform:translate(-50%,-8px);
+    font-size:12px;font-weight:800;letter-spacing:.06em;
+    color:#101607;background:var(--lime);
+    padding:7px 14px;border-radius:999px;
+    opacity:0;transition:opacity .25s,transform .25s;
+    pointer-events:none;white-space:nowrap;
+  }
+  .toast.show{opacity:1;transform:translate(-50%,0)}
+
+  .controls{display:flex;gap:10px;margin-top:14px;align-items:stretch}
+  #tap{
+    flex:1;
+    font:inherit;font-size:20px;font-weight:900;letter-spacing:.16em;
+    color:#101607;background:var(--lime);
+    border:2px solid #0a0f1e;border-radius:16px;
+    padding:18px;min-height:70px;cursor:pointer;
+    box-shadow:0 6px 0 #93b32f;
+    transition:transform .06s,box-shadow .06s,filter .12s;
+    touch-action:manipulation;
+  }
+  #tap:hover{filter:brightness(1.04)}
+  #tap:active{transform:translateY(5px);box-shadow:0 1px 0 #93b32f}
+  #tap:focus-visible{outline:3px solid #fff;outline-offset:3px}
+  #ten{
+    flex:0 0 92px;
+    font:inherit;font-size:14px;font-weight:800;
+    color:var(--ink);background:rgba(246,241,228,.08);
+    border:1.5px solid var(--line);border-radius:16px;
+    padding:14px 10px;min-height:70px;cursor:pointer;
+  }
+  #ten:hover{background:rgba(246,241,228,.14)}
+  #ten:focus-visible{outline:3px solid var(--lime);outline-offset:2px}
+
+  .meta{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap}
+  .status{margin:0;font-size:11.5px;color:var(--muted);min-height:1.4em;line-height:1.5}
+  .links{display:flex;gap:8px}
+  .links button{
+    font:inherit;font-size:11.5px;font-weight:700;
+    color:var(--muted);background:transparent;
+    border:1px solid var(--line);border-radius:999px;
+    padding:7px 12px;min-height:34px;cursor:pointer;
+  }
+  .links button:hover{color:var(--ink);border-color:var(--ink)}
+  .links button:focus-visible{outline:2px solid var(--lime);outline-offset:2px}
+  .note{margin-top:10px;font-size:10.5px;color:rgba(246,241,228,.36);line-height:1.7}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">TAP THE STAR</p>
+      <h1>つつく星</h1>
+    </div>
+    <div class="count"><b id="count">0</b><span>回つついた</span></div>
+  </div>
+
+  <div class="stage" id="stage">
+    <canvas id="sky" role="img" aria-label="つつくたびに育つ星の風景"></canvas>
+    <div class="toast" id="toast"></div>
+  </div>
+
+  <div class="controls">
+    <button type="button" id="tap">つつく</button>
+    <button type="button" id="ten">×10</button>
+  </div>
+
+  <div class="meta">
+    <p class="status" id="status" aria-live="polite">まだ、なにもない星です。</p>
+    <div class="links">
+      <button type="button" id="copy">結果をコピー</button>
+      <button type="button" id="reset">リセット</button>
+    </div>
+  </div>
+
+  <p class="note">つついた回数はこの端末に保存されます。100回を超えると、星がかなり育ちます。音量はありません。静かにどうぞ。</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var URL = "https://rinderdragon0823.github.io/site-factory/tsutsuku-hoshi/";
+  var KEY = "tsutsuku_hoshi_count";
+
+  var canvas = document.getElementById("sky");
+  var ctx = canvas.getContext("2d");
+  var stage = document.getElementById("stage");
+  var countEl = document.getElementById("count");
+  var statusEl = document.getElementById("status");
+  var toastEl = document.getElementById("toast");
+
+  var W = 600, H = 420, dpr = 1;
+  var R = 200, CX = 300, CY = 320;
+  var count = 0;
+  var pulse = 0;
+  var parts = [];
+  var stars = [];
+  var slots = [];
+  var moon = 0;
+  var resetArmed = 0;
+  var toastTimer = 0;
+
+  var MILESTONES = [
+    { n: 5, t: "芽が出た" },
+    { n: 25, t: "木が生えた" },
+    { n: 60, t: "家が建った" },
+    { n: 120, t: "灯りがついた" },
+    { n: 200, t: "輪ができた" },
+    { n: 300, t: "月が昇った" }
+  ];
+
+  try {
+    count = Math.max(0, Number(window.localStorage.getItem(KEY) || 0) | 0);
+  } catch (e) { count = 0; }
+
+  function rnd(seed) {
+    var x = Math.sin(seed * 12.9898) * 43758.5453;
+    return x - Math.floor(x);
+  }
+
+  for (var i = 0; i < 70; i++) {
+    stars.push({ x: rnd(i + 1), y: rnd(i + 101) * 0.62, r: 0.4 + rnd(i + 201) * 1.2, p: rnd(i + 301) * 6.28 });
+  }
+
+  for (var s = 0; s < 70; s++) {
+    slots.push(Math.PI + 0.14 + (Math.PI - 0.28) * rnd(s + 7));
+  }
+  slots.sort(function (a, b) { return a - b; });
+
+  function resize() {
+    var rect = stage.getBoundingClientRect();
+    W = Math.max(280, Math.round(rect.width));
+    H = Math.max(240, Math.round(rect.height));
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
+    R = Math.min(W * 0.40, H * 0.55);
+    CX = W / 2;
+    CY = H * 0.78;
+  }
+
+  function mix(a, b, t) {
+    return [
+      Math.round(a[0] + (b[0] - a[0]) * t),
+      Math.round(a[1] + (b[1] - a[1]) * t),
+      Math.round(a[2] + (b[2] - a[2]) * t)
+    ];
+  }
+
+  function rgb(c, a) {
+    return "rgba(" + c[0] + "," + c[1] + "," + c[2] + "," + (a === undefined ? 1 : a) + ")";
+  }
+
+  function growth() {
+    return {
+      sprouts: count >= 5 ? Math.min(18, 1 + Math.floor((count - 5) / 4)) : 0,
+      trees: count >= 25 ? Math.min(14, 1 + Math.floor((count - 25) / 9)) : 0,
+      houses: count >= 60 ? Math.min(10, 1 + Math.floor((count - 60) / 12)) : 0
+    };
+  }
+
+  function slotFor(i, offset) {
+    return slots[(i * 17 + offset) % slots.length];
+  }
+
+  function surface(angle) {
+    return { x: CX + Math.cos(angle) * R * 0.96, y: CY + Math.sin(angle) * R * 0.96 };
+  }
+
+  function drawSprout(x, y, sc) {
+    ctx.strokeStyle = "#3f8f4b";
+    ctx.lineWidth = Math.max(1.2, sc * 0.08);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x, y - sc * 0.55);
+    ctx.stroke();
+    ctx.fillStyle = "#63b86a";
+    ctx.beginPath();
+    ctx.ellipse(x - sc * 0.16, y - sc * 0.42, sc * 0.2, sc * 0.11, -0.5, 0, 6.283);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(x + sc * 0.17, y - sc * 0.55, sc * 0.2, sc * 0.11, 0.5, 0, 6.283);
+    ctx.fill();
+  }
+
+  function drawTree(x, y, sc) {
+    ctx.fillStyle = "#6b4a2f";
+    ctx.fillRect(x - sc * 0.06, y - sc * 0.5, sc * 0.12, sc * 0.5);
+    ctx.fillStyle = "#2f7a4a";
+    ctx.beginPath();
+    ctx.arc(x, y - sc * 0.72, sc * 0.34, 0, 6.283);
+    ctx.fill();
+    ctx.fillStyle = "#3f9a5d";
+    ctx.beginPath();
+    ctx.arc(x - sc * 0.2, y - sc * 0.6, sc * 0.26, 0, 6.283);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x + sc * 0.2, y - sc * 0.6, sc * 0.26, 0, 6.283);
+    ctx.fill();
+  }
+
+  function drawHouse(x, y, sc, lit) {
+    ctx.fillStyle = "#e8ddc6";
+    ctx.fillRect(x - sc * 0.26, y - sc * 0.4, sc * 0.52, sc * 0.4);
+    ctx.fillStyle = "#c85a3f";
+    ctx.beginPath();
+    ctx.moveTo(x - sc * 0.34, y - sc * 0.4);
+    ctx.lineTo(x, y - sc * 0.68);
+    ctx.lineTo(x + sc * 0.34, y - sc * 0.4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = lit ? "#ffd166" : "rgba(40,44,38,.55)";
+    ctx.fillRect(x - sc * 0.14, y - sc * 0.3, sc * 0.12, sc * 0.12);
+    ctx.fillRect(x + sc * 0.04, y - sc * 0.3, sc * 0.12, sc * 0.12);
+    if (lit) {
+      ctx.save();
+      ctx.globalAlpha = 0.25;
+      ctx.fillStyle = "#ffd166";
+      ctx.beginPath();
+      ctx.arc(x, y - sc * 0.24, sc * 0.26, 0, 6.283);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  function render(now) {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    var p = Math.min(1, count / 300);
+
+    var skyTop = mix([10, 15, 34], [255, 198, 150], p);
+    var skyBot = mix([24, 32, 58], [255, 238, 209], p);
+    var g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, rgb(skyTop));
+    g.addColorStop(1, rgb(skyBot));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    var starAlpha = Math.max(0, 1 - p * 1.3);
+    if (starAlpha > 0) {
+      for (var i = 0; i < stars.length; i++) {
+        var st = stars[i];
+        var tw = 0.5 + 0.5 * Math.abs(Math.sin(now / 900 + st.p));
+        ctx.fillStyle = "rgba(255,255,255," + (starAlpha * tw * 0.8).toFixed(2) + ")";
+        ctx.fillRect(st.x * W, st.y * H, st.r, st.r);
+      }
+    }
+
+    if (count >= 300) {
+      moon = Math.min(1, moon + 0.02);
+      ctx.save();
+      ctx.globalAlpha = 0.9 * moon;
+      ctx.fillStyle = "#f6f1e4";
+      ctx.beginPath();
+      ctx.arc(W * 0.82, H * 0.17, Math.max(10, W * 0.028), 0, 6.283);
+      ctx.fill();
+      ctx.globalAlpha = 0.15 * moon;
+      ctx.beginPath();
+      ctx.arc(W * 0.82, H * 0.17, Math.max(22, W * 0.07), 0, 6.283);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    var scale = 1 + pulse * 0.03;
+    ctx.save();
+    ctx.translate(CX, CY);
+    ctx.scale(scale, scale);
+    ctx.translate(-CX, -CY);
+
+    if (count >= 200) {
+      ctx.strokeStyle = "rgba(217,255,90," + (0.28 + pulse * 0.3).toFixed(2) + ")";
+      ctx.lineWidth = Math.max(2, R * 0.012);
+      ctx.beginPath();
+      ctx.ellipse(CX, CY, R * 1.28, R * 0.34, -0.18, 0, 6.283);
+      ctx.stroke();
+    }
+
+    var ground = mix([116, 106, 92], [86, 152, 96], p);
+    ctx.fillStyle = rgb(ground);
+    ctx.beginPath();
+    ctx.arc(CX, CY, R, 0, 6.283);
+    ctx.fill();
+
+    ctx.fillStyle = "rgba(0,0,0,.12)";
+    ctx.beginPath();
+    ctx.arc(CX + R * 0.12, CY + R * 0.1, R, 0, 6.283);
+    ctx.fill();
+    ctx.fillStyle = rgb(ground);
+    ctx.beginPath();
+    ctx.arc(CX, CY, R * 0.99, 0, 6.283);
+    ctx.fill();
+
+    var gr = growth();
+    var lit = count >= 120;
+    var items = [];
+
+    for (var a = 0; a < gr.sprouts; a++) {
+      var sp = surface(slotFor(a, 0));
+      items.push({ y: sp.y, draw: drawSprout, x: sp.x, sc: R * 0.19 });
+    }
+    for (var b = 0; b < gr.trees; b++) {
+      var tp = surface(slotFor(b, 23));
+      items.push({ y: tp.y, draw: drawTree, x: tp.x, sc: R * 0.27 });
+    }
+    for (var c = 0; c < gr.houses; c++) {
+      var hp = surface(slotFor(c, 47));
+      items.push({ y: hp.y, draw: drawHouse, x: hp.x, sc: R * 0.28, lit: lit });
+    }
+
+    items.sort(function (m, n) { return m.y - n.y; });
+    for (var k = 0; k < items.length; k++) {
+      var it = items[k];
+      if (it.lit === undefined) it.draw(it.x, it.y, it.sc);
+      else it.draw(it.x, it.y, it.sc, it.lit);
+    }
+
+    for (var q = parts.length - 1; q >= 0; q--) {
+      var pt = parts[q];
+      pt.life -= 1;
+      pt.x += pt.vx;
+      pt.y += pt.vy;
+      pt.vy += 0.02;
+      if (pt.life <= 0) { parts.splice(q, 1); continue; }
+      ctx.fillStyle = "rgba(217,255,90," + (pt.life / 40).toFixed(2) + ")";
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 1.6, 0, 6.283);
+      ctx.fill();
+    }
+
+    ctx.restore();
+
+    if (pulse > 0) pulse *= 0.92;
+    if (pulse < 0.01) pulse = 0;
+  }
+
+  function loop(now) {
+    render(now);
+    requestAnimationFrame(loop);
+  }
+
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    window.clearTimeout(toastTimer);
+    toastTimer = window.setTimeout(function () { toastEl.classList.remove("show"); }, 1800);
+  }
+
+  function save() {
+    try { window.localStorage.setItem(KEY, String(count)); } catch (e) {}
+  }
+
+  function describe() {
+    if (count === 0) return "まだ、なにもない星です。";
+    if (count < 5) return "星が、ちょっとだけ温かくなりました。";
+    if (count < 25) return "芽が出はじめています。";
+    if (count < 60) return "木が育ってきました。";
+    if (count < 120) return "家がぽつぽつ建っています。";
+    if (count < 200) return "灯りがついて、夜がにぎやかです。";
+    if (count < 300) return "星のまわりに輪ができました。";
+    return "月まで昇りました。この星は、もう立派です。";
+  }
+
+  function checkMilestones(before, after) {
+    var hit = null;
+    MILESTONES.forEach(function (m) {
+      if (before < m.n && after >= m.n) hit = m.t;
+    });
+    if (hit) toast(hit + "（" + after + "回）");
+  }
+
+  function add(n) {
+    var before = count;
+    count += n;
+    checkMilestones(before, count);
+    countEl.textContent = String(count);
+    statusEl.textContent = describe();
+    pulse = 1;
+    for (var i = 0; i < 8; i++) {
+      var ang = Math.PI + 0.15 + Math.random() * (Math.PI - 0.3);
+      var pos = surface(ang);
+      parts.push({
+        x: pos.x,
+        y: pos.y,
+        vx: (Math.random() - 0.5) * 1.6,
+        vy: -0.6 - Math.random() * 1.6,
+        life: 22 + Math.random() * 18
+      });
+    }
+    save();
+  }
+
+  document.getElementById("tap").addEventListener("click", function () { add(1); });
+  document.getElementById("ten").addEventListener("click", function () { add(10); });
+
+  document.getElementById("copy").addEventListener("click", function () {
+    var text = "【つつく星】" + count + "回つついて、" + describe() + "\n" + URL;
+    copyText(text).then(function (ok) {
+      statusEl.textContent = ok ? "コピーしました。" : "コピーできませんでした。";
+      window.setTimeout(function () { statusEl.textContent = describe(); }, 1600);
+    });
+  });
+
+  var resetBtn = document.getElementById("reset");
+  resetBtn.addEventListener("click", function () {
+    var now = Date.now();
+    if (now - resetArmed < 3000) {
+      count = 0;
+      moon = 0;
+      parts = [];
+      save();
+      countEl.textContent = "0";
+      statusEl.textContent = describe();
+      resetBtn.textContent = "リセット";
+      resetArmed = 0;
+      toast("星を、まっさらにしました");
+      return;
+    }
+    resetArmed = now;
+    resetBtn.textContent = "もう一度でリセット";
+    window.setTimeout(function () {
+      if (Date.now() - resetArmed >= 2900) resetBtn.textContent = "リセット";
+    }, 3000);
+  });
+
+  document.addEventListener("keydown", function (e) {
+    if (e.code === "Space" || e.key === "Enter") {
+      var tag = (e.target && e.target.tagName) || "";
+      if (tag === "BUTTON" || tag === "A") return;
+      e.preventDefault();
+      add(1);
+    }
+  });
+
+  function copyText(text) {
+    return new Promise(function (resolve) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () { resolve(true); }, function () { resolve(fallbackCopy(text)); });
+      } else {
+        resolve(fallbackCopy(text));
+      }
+    });
+  }
+
+  function fallbackCopy(text) {
+    try {
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.top = "-1000px";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok;
+    } catch (e) { return false; }
+  }
+
+  if (window.ResizeObserver) new ResizeObserver(resize).observe(stage);
+  else window.addEventListener("resize", resize);
+
+  resize();
+  countEl.textContent = String(count);
+  statusEl.textContent = describe();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

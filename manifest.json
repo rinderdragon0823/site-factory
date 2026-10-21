@@ -423,6 +423,115 @@
           }
         ]
       }
+    },
+    {
+      "slug": "tsutsuku-hoshi",
+      "title": "つつく星",
+      "pitch": "つつくたびに、なにもない星に芽・木・家・灯りが増えていく。眺めて育てるカウンター。",
+      "kind": "toy",
+      "date": "2026-10-22",
+      "demo": {
+        "steps": [
+          {
+            "click": "つつく",
+            "after": 120
+          },
+          {
+            "click": "つつく",
+            "after": 120
+          },
+          {
+            "click": "つつく",
+            "after": 120
+          },
+          {
+            "click": "つつく",
+            "after": 120
+          },
+          {
+            "click": "つつく",
+            "after": 120
+          },
+          {
+            "click": "つつく",
+            "after": 120
+          },
+          {
+            "click": "つつく",
+            "after": 120
+          },
+          {
+            "click": "つつく",
+            "after": 120
+          },
+          {
+            "click": "つつく",
+            "after": 120
+          },
+          {
+            "click": "つつく",
+            "after": 120
+          },
+          {
+            "click": "つつく",
+            "after": 120
+          },
+          {
+            "click": "つつく",
+            "after": 120
+          },
+          {
+            "click": "×10",
+            "after": 220
+          },
+          {
+            "click": "×10",
+            "after": 220
+          },
+          {
+            "click": "×10",
+            "after": 220
+          },
+          {
+            "click": "×10",
+            "after": 220
+          },
+          {
+            "click": "×10",
+            "after": 220
+          },
+          {
+            "wait": 700
+          },
+          {
+            "click": "×10",
+            "after": 220
+          },
+          {
+            "click": "×10",
+            "after": 220
+          },
+          {
+            "click": "×10",
+            "after": 220
+          },
+          {
+            "click": "×10",
+            "after": 220
+          },
+          {
+            "click": "×10",
+            "after": 220
+          },
+          {
+            "click": "×10",
+            "after": 220
+          },
+          {
+            "wait": 900
+          }
+        ]
+      }
     }
   ]
 }
