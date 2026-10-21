@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ドミノ倒し — 並べて、倒して、眺める。</title>
+<meta name="description" content="画面をタップしてドミノを並べ、「倒す」で一気に連鎖。色とりどりのドミノが波のように倒れていきます。">
+<meta property="og:title" content="ドミノ倒し — 並べて、倒して、眺める。">
+<meta property="og:description" content="タップでドミノを並べて、「倒す」を押すだけ。連鎖が気持ちいい、眺めるだけのドミノ。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/domino/">
+<meta property="og:site_name" content="ドミノ倒し">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#fdf7ea">
+<style>
+  :root{
+    --paper:#fdf7ea;
+    --ink:#241f1a;
+    --muted:#8a7d6b;
+    --accent:#e4572e;
+    --line:rgba(36,31,26,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 500px at 100% -10%, #ffe8cf 0%, transparent 60%),
+      radial-gradient(700px 420px at -10% 110%, #e9f1e4 0%, transparent 55%),
+      var(--paper);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+  }
+  .wrap{max-width:780px;margin:auto;width:100%;padding:20px 16px calc(26px + env(safe-area-inset-bottom))}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--accent);font-weight:800}
+  h1{margin:.26em 0 .1em;font-size:clamp(1.8rem,7vw,2.5rem);letter-spacing:-.03em;line-height:1.08}
+  .lead{margin:0 0 12px;font-size:13px;color:var(--muted);line-height:1.65}
+  .stage{
+    position:relative;width:100%;
+    height:clamp(320px,50vh,500px);
+    border-radius:18px;overflow:hidden;
+    background:#fffdf7;
+    border:2px solid var(--ink);
+    box-shadow:0 14px 34px rgba(36,31,26,.16);
+    touch-action:none;
+    -webkit-user-select:none;user-select:none;
+    -webkit-tap-highlight-color:transparent;
+  }
+  #board{display:block;width:100%;height:100%;cursor:crosshair}
+  .tag{
+    position:absolute;right:12px;top:12px;
+    font-size:10px;letter-spacing:.18em;color:var(--muted);
+    pointer-events:none;
+  }
+  .controls{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+  .controls button{
+    font:inherit;font-size:13.5px;font-weight:800;letter-spacing:.03em;
+    border-radius:11px;min-height:48px;padding:11px 14px;cursor:pointer;
+    color:var(--ink);background:#fffdf8;border:1.5px solid var(--line);
+    transition:border-color .15s,background .15s,transform .08s;
+  }
+  .controls button:hover{border-color:var(--ink);background:#fffaf0}
+  .controls button:active{transform:translateY(1px)}
+  .controls button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+  .controls .topple{
+    flex:1 1 130px;color:#fff;background:var(--accent);
+    border:2px solid var(--ink);box-shadow:4px 4px 0 var(--ink);
+  }
+  .controls .topple:hover{background:#d14a24}
+  .controls .topple:active{transform:translate(2px,2px);box-shadow:2px 2px 0 var(--ink)}
+  .status{margin:12px 0 0;font-size:12px;color:var(--muted);min-height:1.4em}
+  .status b{color:var(--ink)}
+  .hint{margin-top:8px;font-size:11px;color:rgba(36,31,26,.45);line-height:1.7}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <p class="kicker">DOMINO</p>
+  <h1>ドミノ倒し</h1>
+  <p class="lead">画面をタップして並べるか、「並べる」でセット。「倒す」で、波のように倒れていきます。</p>
+
+  <div class="stage" id="stage">
+    <canvas id="board" role="img" aria-label="ドミノを並べて倒すボード"></canvas>
+    <div class="tag">TAP TO ADD</div>
+  </div>
+
+  <div class="controls">
+    <button type="button" id="line">並べる</button>
+    <button type="button" id="dense">ぎっしり</button>
+    <button type="button" class="topple" id="topple">倒す</button>
+    <button type="button" id="reset">リセット</button>
+  </div>
+
+  <p class="status" id="status" aria-live="polite">まずは「並べる」から。</p>
+  <p class="hint">ドミノはタップした位置に追加できます（最大90枚）。倒したあとにもう一度「倒す」を押すと、立ち上がってからまた倒れます。</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var stage = document.getElementById("stage");
+  var canvas = document.getElementById("board");
+  var ctx = canvas.getContext("2d");
+  var statusEl = document.getElementById("status");
+
+  var W = 600, H = 380, dpr = 1, groundY = 240;
+  var dominoes = [];
+  var falling = false;
+  var fallStart = 0;
+  var fallMaxDelay = 0;
+
+  var COLORS = ["#e4572e", "#f2b134", "#2a9d8f", "#3d6fb4", "#d1495b", "#7b5ea7", "#4f9d69", "#e08a2e"];
+  var DW = 27, DH = 66;
+
+  function resize() {
+    var rect = stage.getBoundingClientRect();
+    W = Math.max(280, Math.round(rect.width));
+    H = Math.max(240, Math.round(rect.height));
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
+    groundY = Math.round(H * 0.72);
+    dominoes.forEach(function (d) {
+      d.x = Math.min(d.x, W - 24);
+    });
+  }
+
+  function roundRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function addDomino(x) {
+    if (dominoes.length >= 90) return;
+    dominoes.push({
+      x: Math.max(24, Math.min(W - 24, x)),
+      angle: 0,
+      delay: 0,
+      maxA: (Math.PI / 2) * (0.84 + ((dominoes.length * 7) % 6) * 0.026),
+      color: COLORS[dominoes.length % COLORS.length]
+    });
+    statusEl.textContent = dominoes.length + "枚。タップで追加、「倒す」で連鎖。";
+  }
+
+  function build(count) {
+    dominoes = [];
+    falling = false;
+    var margin = 40;
+    var usable = W - margin * 2;
+    for (var i = 0; i < count; i++) {
+      var x = margin + (usable * i) / (count - 1);
+      dominoes.push({
+        x: x,
+        angle: 0,
+        delay: 0,
+        maxA: (Math.PI / 2) * (0.84 + (i % 6) * 0.026),
+        color: COLORS[i % COLORS.length]
+      });
+    }
+    statusEl.textContent = count + "枚、並べました。「倒す」を押してください。";
+  }
+
+  function topple() {
+    if (!dominoes.length || falling) return;
+    falling = true;
+    fallStart = performance.now();
+    var order = dominoes.slice().sort(function (a, b) { return a.x - b.x; });
+    order.forEach(function (d, i) {
+      d.angle = 0;
+      d.delay = 0.3 + i * 0.05;
+    });
+    fallMaxDelay = 0.3 + (order.length - 1) * 0.05 + 0.34;
+    statusEl.textContent = "倒しています…";
+  }
+
+  function update(now) {
+    if (!falling) return;
+    var t = (now - fallStart) / 1000;
+    for (var i = 0; i < dominoes.length; i++) {
+      var d = dominoes[i];
+      var local = t - d.delay;
+      if (local <= 0) {
+        d.angle = 0;
+      } else {
+        var p = Math.min(1, local / 0.34);
+        d.angle = Math.pow(p, 1.5) * (d.maxA || Math.PI / 2);
+      }
+    }
+    if (t >= fallMaxDelay) {
+      falling = false;
+      var secs = fallMaxDelay.toFixed(1);
+      statusEl.textContent = dominoes.length + "枚、" + secs + "秒で全部倒れました。";
+    }
+  }
+
+  function drawDomino(d) {
+    ctx.save();
+    // shadow
+    ctx.fillStyle = "rgba(36,31,26,.10)";
+    ctx.beginPath();
+    ctx.ellipse(d.x + 8, groundY + 2, 20, 5, 0, 0, 6.283);
+    ctx.fill();
+
+    ctx.translate(d.x, groundY);
+    ctx.rotate(d.angle);
+
+    ctx.fillStyle = d.color;
+    ctx.strokeStyle = "#241f1a";
+    ctx.lineWidth = 1.6;
+    roundRect(-DW / 2, -DH, DW, DH, 3);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(255,253,247,.92)";
+    ctx.fillRect(-DW / 2 + 2, -DH * 0.52, DW - 4, 1.6);
+
+    ctx.fillStyle = "rgba(255,253,247,.95)";
+    ctx.beginPath();
+    ctx.arc(0, -DH * 0.75, 2.2, 0, 6.283);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(-3.2, -DH * 0.28, 1.8, 0, 6.283);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(3.2, -DH * 0.28, 1.8, 0, 6.283);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  function render() {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    // 背景
+    var g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, "#fffdf8");
+    g.addColorStop(1, "#fbf1dc");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    // うっすらグリッド
+    ctx.fillStyle = "rgba(36,31,26,.05)";
+    for (var gx = 20; gx < W; gx += 28) {
+      for (var gy = 20; gy < groundY - 10; gy += 28) {
+        ctx.fillRect(gx, gy, 1.5, 1.5);
+      }
+    }
+
+    // 床
+    ctx.fillStyle = "rgba(36,31,26,.07)";
+    ctx.fillRect(0, groundY, W, H - groundY);
+    ctx.strokeStyle = "rgba(36,31,26,.35)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(0, groundY + 0.5);
+    ctx.lineTo(W, groundY + 0.5);
+    ctx.stroke();
+
+    // 倒れる順に手前から描く
+    var sorted = dominoes.slice().sort(function (a, b) { return a.x - b.x; });
+    for (var i = 0; i < sorted.length; i++) drawDomino(sorted[i]);
+  }
+
+  var last = 0;
+  function loop(now) {
+    if (!last) last = now;
+    update(now);
+    render();
+    requestAnimationFrame(loop);
+  }
+
+  document.getElementById("line").addEventListener("click", function () { build(16); });
+  document.getElementById("dense").addEventListener("click", function () { build(30); });
+  document.getElementById("reset").addEventListener("click", function () {
+    dominoes = [];
+    falling = false;
+    statusEl.textContent = "リセットしました。タップで並べてください。";
+  });
+  document.getElementById("topple").addEventListener("click", topple);
+
+  canvas.addEventListener("pointerdown", function (e) {
+    e.preventDefault();
+    if (falling) return;
+    var rect = canvas.getBoundingClientRect();
+    var x = (e.clientX - rect.left) / rect.width * W;
+    addDomino(x);
+  }, { passive: false });
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key === " " || e.key === "Enter") {
+      var tag = (e.target && e.target.tagName) || "";
+      if (tag === "BUTTON") return;
+      e.preventDefault();
+      topple();
+    }
+  });
+
+  if (window.ResizeObserver) new ResizeObserver(resize).observe(stage);
+  else window.addEventListener("resize", resize);
+
+  resize();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
