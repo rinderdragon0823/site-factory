@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ポチポチビート — マスを押して、音を鳴らす。</title>
+<meta name="description" content="16ステップのちいさなビートマシン。マスを押して音を鳴らし、パターンを組んで共有できます。">
+<meta property="og:title" content="ポチポチビート — マスを押して、音を鳴らす。">
+<meta property="og:description" content="キック・スネア・ハット・ベースの16ステップシーケンサー。押すだけでビートが組めます。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/pochi-beat/">
+<meta property="og:site_name" content="ポチポチビート">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#fbf3e4">
+<style>
+  :root{
+    --paper:#fbf3e4;
+    --ink:#1c1913;
+    --muted:#847868;
+    --line:rgba(28,25,19,.14);
+    --kick:#e4572e;
+    --snare:#d1495b;
+    --hat:#e8a52b;
+    --bass:#2a9d8f;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 500px at 100% -10%, #ffe8c9 0%, transparent 60%),
+      radial-gradient(700px 420px at -10% 110%, #e7f2e6 0%, transparent 55%),
+      var(--paper);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+  }
+  .wrap{max-width:780px;margin:auto;width:100%;padding:20px 16px calc(26px + env(safe-area-inset-bottom))}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--kick);font-weight:800}
+  h1{margin:.26em 0 .1em;font-size:clamp(1.8rem,7vw,2.5rem);letter-spacing:-.03em;line-height:1.08}
+  .lead{margin:0 0 14px;font-size:13px;color:var(--muted);line-height:1.65}
+
+  .panel{
+    background:#fffdf7;border:2px solid var(--ink);border-radius:18px;
+    box-shadow:6px 6px 0 var(--ink);padding:16px;
+  }
+  .transport{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  #play{
+    font:inherit;font-size:15px;font-weight:900;letter-spacing:.04em;
+    color:#fff;background:var(--ink);border:2px solid var(--ink);border-radius:12px;
+    padding:12px 20px;min-height:50px;cursor:pointer;min-width:130px;
+  }
+  #play:hover{background:#332e24}
+  #play:active{transform:translateY(1px)}
+  #play:focus-visible{outline:3px solid var(--kick);outline-offset:2px}
+  #play.on{background:var(--kick);border-color:var(--ink)}
+  .bpm{display:flex;align-items:center;gap:8px;font-size:11.5px;font-weight:800;letter-spacing:.08em;color:var(--muted);flex:1;min-width:170px}
+  .bpm b{color:var(--ink);font-size:14px;letter-spacing:0;min-width:2.4em;text-align:right}
+  .bpm input{flex:1;accent-color:var(--kick);cursor:pointer}
+
+  .gridwrap{overflow-x:auto;padding-bottom:2px}
+  .rows{min-width:480px}
+  .row{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+  .row .name{
+    width:56px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;
+    display:flex;align-items:center;gap:5px;color:var(--muted);
+  }
+  .row .name i{width:7px;height:7px;border-radius:2px;display:block;background:var(--c)}
+  .row .name.pulse{color:var(--ink);transform:translateX(2px)}
+  .cells{flex:1;display:grid;grid-template-columns:repeat(16,minmax(20px,1fr));gap:3px}
+  .cells button{
+    aspect-ratio:1/1;min-height:22px;padding:0;cursor:pointer;
+    background:#f2e9d8;border:1px solid rgba(28,25,19,.1);border-radius:4px;
+    transition:background .1s,transform .06s;
+  }
+  .cells button:nth-child(4n+1){background:#ece2cf}
+  .cells button.on{background:var(--c);border-color:rgba(28,25,19,.35)}
+  .cells button.now{box-shadow:0 0 0 2px var(--ink) inset;transform:scale(1.06)}
+  .cells button:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
+  .cells button:active{transform:scale(.94)}
+
+  .presets{display:flex;gap:7px;flex-wrap:wrap;margin-top:14px}
+  .presets button{
+    font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:transparent;
+    border:1.5px solid var(--line);border-radius:999px;
+    padding:8px 13px;min-height:38px;cursor:pointer;
+    transition:border-color .15s,background .15s;
+  }
+  .presets button:hover{border-color:var(--ink);background:#fff7e8}
+  .presets button:focus-visible{outline:2px solid var(--kick);outline-offset:2px}
+
+  .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .actions button,.actions a{
+    flex:1 1 40%;min-height:46px;
+    display:inline-flex;align-items:center;justify-content:center;
+    font:inherit;font-size:12.5px;font-weight:800;text-decoration:none;
+    color:var(--ink);background:#fff;border:1.5px solid var(--line);border-radius:11px;
+    padding:10px;cursor:pointer;
+  }
+  .actions button:hover,.actions a:hover{border-color:var(--ink)}
+  .actions button:focus-visible,.actions a:focus-visible{outline:3px solid var(--kick);outline-offset:2px}
+  .status{margin:10px 0 0;font-size:11.5px;color:var(--muted);min-height:1.4em}
+  .note{margin-top:12px;font-size:10.5px;color:rgba(28,25,19,.45);line-height:1.7}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <p class="kicker">STEP SEQUENCER</p>
+  <h1>ポチポチビート</h1>
+  <p class="lead">マスを押すと音が鳴ります。16ステップで、ちいさなビートを組んでみてください。</p>
+
+  <section class="panel" aria-label="ビートシーケンサー">
+    <div class="transport">
+      <button type="button" id="play">▶ 再生</button>
+      <label class="bpm" for="bpm">BPM <input type="range" id="bpm" min="80" max="160" step="2" value="112" aria-label="テンポ"><b id="bpmVal">112</b></label>
+    </div>
+
+    <div class="gridwrap">
+      <div class="rows" id="rows"></div>
+    </div>
+
+    <div class="presets" role="group" aria-label="プリセット">
+      <button type="button" data-preset="four">四つ打ち</button>
+      <button type="button" data-preset="hip">ヒップホップ</button>
+      <button type="button" data-preset="bossa">ボサノバ風</button>
+      <button type="button" data-preset="random">ランダム</button>
+      <button type="button" id="clearBtn">クリア</button>
+    </div>
+
+    <div class="actions">
+      <button type="button" id="copyBtn">パターンをコピー</button>
+      <a id="tweet" href="#" target="_blank" rel="noopener">Xでシェア</a>
+    </div>
+    <p class="status" id="status" aria-live="polite">「四つ打ち」から始めます。再生を押してください。</p>
+  </section>
+
+  <p class="note">音が出ます。音量にご注意ください。パターンは絵文字でコピーできるので、そのまま貼って共有できます。</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var URL = "https://rinderdragon0823.github.io/site-factory/pochi-beat/";
+  var STEPS = 16;
+
+  var TRACKS = [
+    { id: "kick", name: "キック", color: "#e4572e" },
+    { id: "snare", name: "スネア", color: "#d1495b" },
+    { id: "hat", name: "ハット", color: "#e8a52b" },
+    { id: "bass", name: "ベース", color: "#2a9d8f" }
+  ];
+
+  var PRESETS = {
+    four: {
+      kick: "1000100010001000",
+      snare: "0000100000001000",
+      hat: "0010001000100010",
+      bass: "1000000010000000"
+    },
+    hip: {
+      kick: "1000001000100000",
+      snare: "0000100000001000",
+      hat: "1010101010101010",
+      bass: "1000001001000010"
+    },
+    bossa: {
+      kick: "1000001010000010",
+      snare: "0000100000001000",
+      hat: "0101010101010101",
+      bass: "0010001000100010"
+    }
+  };
+
+  var pattern = {};
+  var cells = {};
+  var lastCol = -1;
+  var playing = false;
+  var bpm = 112;
+  var timerId = 0;
+  var nextTime = 0;
+  var stepIndex = 0;
+
+  var ac = null;
+  var master = null;
+  var noiseBuf = null;
+
+  var rowsEl = document.getElementById("rows");
+  var playBtn = document.getElementById("play");
+  var bpmInput = document.getElementById("bpm");
+  var bpmVal = document.getElementById("bpmVal");
+  var statusEl = document.getElementById("status");
+
+  function parse(str) {
+    var out = [];
+    for (var i = 0; i < STEPS; i++) out.push(str.charAt(i) === "1");
+    return out;
+  }
+
+  function setPreset(name) {
+    var p = PRESETS[name];
+    TRACKS.forEach(function (t) {
+      pattern[t.id] = parse(p[t.id]);
+    });
+    paintAll();
+  }
+
+  function randomPattern() {
+    TRACKS.forEach(function (t) {
+      var arr = [];
+      for (var i = 0; i < STEPS; i++) {
+        var chance = t.id === "hat" ? 0.55 : t.id === "kick" ? 0.26 : 0.18;
+        arr.push(Math.random() < chance);
+      }
+      arr[0] = t.id === "kick" ? true : arr[0];
+      pattern[t.id] = arr;
+    });
+    paintAll();
+  }
+
+  function build() {
+    TRACKS.forEach(function (t) {
+      var row = document.createElement("div");
+      row.className = "row";
+      row.style.setProperty("--c", t.color);
+
+      var name = document.createElement("div");
+      name.className = "name";
+      name.innerHTML = '<i aria-hidden="true"></i>' + t.name;
+
+      var grid = document.createElement("div");
+      grid.className = "cells";
+      grid.setAttribute("role", "group");
+      grid.setAttribute("aria-label", t.name);
+
+      cells[t.id] = [];
+      for (var i = 0; i < STEPS; i++) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.setAttribute("aria-label", t.name + " " + (i + 1) + "拍目");
+        b.dataset.track = t.id;
+        b.dataset.step = String(i);
+        b.addEventListener("click", onCell);
+        grid.appendChild(b);
+        cells[t.id].push(b);
+      }
+
+      row.appendChild(name);
+      row.appendChild(grid);
+      rowsEl.appendChild(row);
+      t.row = row;
+      t.label = name;
+    });
+  }
+
+  function onCell(e) {
+    var b = e.currentTarget;
+    var t = b.dataset.track;
+    var i = Number(b.dataset.step);
+    pattern[t][i] = !pattern[t][i];
+    b.classList.toggle("on", pattern[t][i]);
+    if (pattern[t][i] && ac && !playing) triggerOne(t, i);
+  }
+
+  function paintAll() {
+    TRACKS.forEach(function (t) {
+      for (var i = 0; i < STEPS; i++) {
+        cells[t.id][i].classList.toggle("on", pattern[t.id][i]);
+      }
+    });
+  }
+
+  // ---- audio ----
+  function initAudio() {
+    if (ac) {
+      if (ac.state === "suspended") ac.resume();
+      return;
+    }
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      ac = new AC();
+      master = ac.createGain();
+      master.gain.value = 0.75;
+      master.connect(ac.destination);
+    } catch (e) {
+      ac = null;
+    }
+  }
+
+  function makeNoise() {
+    if (!ac) return null;
+    if (!noiseBuf) {
+      var len = Math.floor(ac.sampleRate * 0.3);
+      noiseBuf = ac.createBuffer(1, len, ac.sampleRate);
+      var d = noiseBuf.getChannelData(0);
+      for (var i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    }
+    var src = ac.createBufferSource();
+    src.buffer = noiseBuf;
+    return src;
+  }
+
+  function kick(t) {
+    var o = ac.createOscillator();
+    var g = ac.createGain();
+    o.type = "sine";
+    o.frequency.setValueAtTime(150, t);
+    o.frequency.exponentialRampToValueAtTime(45, t + 0.13);
+    g.gain.setValueAtTime(0.9, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+    o.connect(g);
+    g.connect(master);
+    o.start(t);
+    o.stop(t + 0.32);
+  }
+
+  function snare(t) {
+    var src = makeNoise();
+    if (!src) return;
+    var bp = ac.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = 1800;
+    bp.Q.value = 0.8;
+    var g = ac.createGain();
+    g.gain.setValueAtTime(0.55, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+    src.connect(bp);
+    bp.connect(g);
+    g.connect(master);
+    src.start(t);
+    src.stop(t + 0.2);
+  }
+
+  function hat(t) {
+    var src = makeNoise();
+    if (!src) return;
+    var hp = ac.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = 7000;
+    var g = ac.createGain();
+    g.gain.setValueAtTime(0.22, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+    src.connect(hp);
+    hp.connect(g);
+    g.connect(master);
+    src.start(t);
+    src.stop(t + 0.06);
+  }
+
+  function bass(t, freq) {
+    var o = ac.createOscillator();
+    var g = ac.createGain();
+    var lp = ac.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = 800;
+    o.type = "square";
+    o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.28, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.24);
+    o.connect(lp);
+    lp.connect(g);
+    g.connect(master);
+    o.start(t);
+    o.stop(t + 0.26);
+  }
+
+  var NOTES = [130.81, 146.83, 164.81, 196.0, 220.0];
+
+  function triggerOne(track, step) {
+    initAudio();
+    if (!ac) return;
+    var when = ac.currentTime + 0.01;
+    if (track === "kick") kick(when);
+    if (track === "snare") snare(when);
+    if (track === "hat") hat(when);
+    if (track === "bass") bass(when, NOTES[step % NOTES.length]);
+  }
+
+  function triggerStep(step) {
+    if (ac) {
+      var when = ac.currentTime + 0.01;
+      if (pattern.kick[step]) kick(when);
+      if (pattern.snare[step]) snare(when);
+      if (pattern.hat[step]) hat(when);
+      if (pattern.bass[step]) bass(when, NOTES[step % NOTES.length]);
+    }
+    highlight(step);
+  }
+
+  function highlight(step) {
+    if (lastCol >= 0) {
+      TRACKS.forEach(function (t) {
+        cells[t.id][lastCol].classList.remove("now");
+      });
+    }
+    TRACKS.forEach(function (t) {
+      cells[t.id][step].classList.add("now");
+      if (pattern[t.id][step]) {
+        t.label.classList.add("pulse");
+        window.setTimeout(function () { t.label.classList.remove("pulse"); }, 110);
+      }
+    });
+    lastCol = step;
+  }
+
+  function clearHighlight() {
+    if (lastCol >= 0) {
+      TRACKS.forEach(function (t) { cells[t.id][lastCol].classList.remove("now"); });
+    }
+    lastCol = -1;
+  }
+
+  function start() {
+    initAudio();
+    playing = true;
+    playBtn.textContent = "■ 停止";
+    playBtn.classList.add("on");
+    stepIndex = 0;
+    nextTime = performance.now() + 80;
+    statusEl.textContent = "再生中。マスを押すと、次の周から鳴ります。";
+    timerId = window.setInterval(tick, 25);
+  }
+
+  function stop() {
+    playing = false;
+    window.clearInterval(timerId);
+    playBtn.textContent = "▶ 再生";
+    playBtn.classList.remove("on");
+    clearHighlight();
+    statusEl.textContent = "停止しました。";
+  }
+
+  function tick() {
+    var now = performance.now();
+    var stepMs = 60000 / bpm / 4;
+    while (nextTime <= now + 15) {
+      triggerStep(stepIndex);
+      nextTime += stepMs;
+      stepIndex = (stepIndex + 1) % STEPS;
+    }
+  }
+
+  playBtn.addEventListener("click", function () {
+    if (playing) stop();
+    else start();
+  });
+
+  bpmInput.addEventListener("input", function () {
+    bpm = Number(bpmInput.value) || 112;
+    bpmVal.textContent = String(bpm);
+  });
+
+  document.querySelectorAll("[data-preset]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var name = b.getAttribute("data-preset");
+      if (name === "random") randomPattern();
+      else setPreset(name);
+      statusEl.textContent = "プリセット「" + b.textContent + "」を読み込みました。";
+    });
+  });
+
+  document.getElementById("clearBtn").addEventListener("click", function () {
+    TRACKS.forEach(function (t) { pattern[t.id] = new Array(STEPS).fill(false); });
+    paintAll();
+    statusEl.textContent = "まっさらにしました。";
+  });
+
+  function gridText() {
+    var emoji = { kick: "🥁", snare: "🪘", hat: "✨", bass: "🎸" };
+    var lines = ["【ポチポチビート】" + bpm + "BPM"];
+    TRACKS.forEach(function (t) {
+      lines.push(emoji[t.id] + " " + pattern[t.id].map(function (v) { return v ? "🟧" : "⬜"; }).join(""));
+    });
+    lines.push(URL);
+    return lines.join("\n");
+  }
+
+  document.getElementById("copyBtn").addEventListener("click", function () {
+    copyText(gridText()).then(function (ok) {
+      statusEl.textContent = ok ? "パターンをコピーしました。" : "コピーできませんでした。";
+    });
+  });
+
+  document.getElementById("tweet").addEventListener("click", function () {
+    this.href = "https://twitter.com/intent/tweet?text=" + encodeURIComponent(gridText());
+  });
+
+  function copyText(text) {
+    return new Promise(function (resolve) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () { resolve(true); }, function () { resolve(fallbackCopy(text)); });
+      } else {
+        resolve(fallbackCopy(text));
+      }
+    });
+  }
+
+  function fallbackCopy(text) {
+    try {
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.top = "-1000px";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok;
+    } catch (e) { return false; }
+  }
+
+  document.addEventListener("keydown", function (e) {
+    if (e.code === "Space") {
+      var tag = (e.target && e.target.tagName) || "";
+      if (tag === "BUTTON" || tag === "A" || tag === "INPUT") return;
+      e.preventDefault();
+      if (playing) stop(); else start();
+    }
+  });
+
+  build();
+  setPreset("four");
+  bpmVal.textContent = String(bpm);
+})();
+</script>
+</body>
+</html>
