@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ドット絵屋 — 16×16の小さなキャンバス。</title>
+<meta name="description" content="16×16のマスに色を置くだけでドット絵が描けます。左右対称モード、型紙、PNG保存つき。">
+<meta property="og:title" content="ドット絵屋 — 16×16の小さなキャンバス。">
+<meta property="og:description" content="16×16のマスを塗るだけ。ハート・ほし・きのこの型紙つきで、PNG保存もできます。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/dot-e-ya/">
+<meta property="og:site_name" content="ドット絵屋">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#12141a">
+<style>
+  :root{
+    --bg:#12141a;
+    --panel:#1a1e27;
+    --ink:#eef1f6;
+    --muted:rgba(238,241,246,.58);
+    --accent:#ffd23f;
+    --line:rgba(238,241,246,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(800px 460px at 90% -10%, #22304a 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #1d2a22 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:560px;margin:auto;width:100%;padding:20px 16px calc(26px + env(safe-area-inset-bottom))}
+  .kicker{margin:0;font-size:10px;letter-spacing:.3em;color:var(--accent);font-weight:800}
+  h1{margin:.26em 0 .1em;font-size:clamp(1.7rem,6.6vw,2.3rem);letter-spacing:-.02em;line-height:1.08}
+  .lead{margin:0 0 12px;font-size:12.5px;color:var(--muted);line-height:1.65}
+
+  .board{
+    display:flex;justify-content:center;
+    padding:14px;border-radius:16px;
+    background:var(--panel);
+    border:1px solid var(--line);
+    box-shadow:0 16px 40px rgba(0,0,0,.45);
+  }
+  #dot{
+    display:block;
+    border-radius:6px;
+    background:#0c0e13;
+    touch-action:none;
+    cursor:crosshair;
+    -webkit-user-select:none;user-select:none;
+    -webkit-tap-highlight-color:transparent;
+  }
+
+  .palette{display:grid;grid-template-columns:repeat(12,1fr);gap:5px;margin-top:12px}
+  .palette button{
+    aspect-ratio:1/1;border-radius:6px;padding:0;cursor:pointer;
+    border:1.5px solid rgba(238,241,246,.25);
+    transition:transform .08s,box-shadow .12s,border-color .12s;
+  }
+  .palette button:hover{transform:translateY(-2px)}
+  .palette button[aria-pressed="true"]{border-color:#fff;box-shadow:0 0 0 2px rgba(255,255,255,.5)}
+  .palette button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+  .row{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+  .row button{
+    font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:transparent;
+    border:1.5px solid var(--line);border-radius:999px;
+    padding:9px 14px;min-height:40px;cursor:pointer;
+    transition:border-color .15s,background .15s,color .15s;
+  }
+  .row button:hover{border-color:var(--ink)}
+  .row button[aria-pressed="true"]{background:var(--accent);color:#191600;border-color:var(--accent)}
+  .row button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+  .save{
+    width:100%;margin-top:10px;
+    font:inherit;font-size:15px;font-weight:900;letter-spacing:.04em;
+    color:#191600;background:var(--accent);
+    border:0;border-radius:12px;padding:14px;min-height:52px;cursor:pointer;
+    box-shadow:0 4px 0 #b98f2c;transition:transform .08s,box-shadow .08s;
+  }
+  .save:active{transform:translateY(3px);box-shadow:0 1px 0 #b98f2c}
+  .save:focus-visible{outline:3px solid #fff;outline-offset:3px}
+
+  .status{margin:10px 0 0;font-size:11.5px;color:var(--muted);min-height:1.4em}
+  .note{margin-top:8px;font-size:10.5px;color:rgba(238,241,246,.38);line-height:1.7}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <p class="kicker">16 × 16 PIXEL</p>
+  <h1>ドット絵屋</h1>
+  <p class="lead">16×16のマスに色を置くだけ。型紙から始めて、すこしずつ直すのが早いです。</p>
+
+  <div class="board">
+    <canvas id="dot" role="img" aria-label="16かける16のドット絵キャンバス"></canvas>
+  </div>
+
+  <div class="palette" id="palette" role="group" aria-label="色を選ぶ"></div>
+
+  <div class="row">
+    <button type="button" id="heart">ハート</button>
+    <button type="button" id="star">ほし</button>
+    <button type="button" id="mush">きのこ</button>
+    <button type="button" id="random">ランダム</button>
+  </div>
+
+  <div class="row">
+    <button type="button" id="eraser" aria-pressed="false">けす</button>
+    <button type="button" id="mirror" aria-pressed="true">左右対称</button>
+    <button type="button" id="clear">ぜんぶ消す</button>
+  </div>
+
+  <button type="button" class="save" id="save">PNGで保存（512×512）</button>
+
+  <p class="status" id="status" aria-live="polite">色を選んで、マスをなぞってください。</p>
+  <p class="note">保存したPNGは背景が透明です。アイコンやファミコンの絵の練習にどうぞ。</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var N = 16;
+  var COLORS = [
+    "#1b1b1b", "#ffffff", "#e4572e", "#f2b134", "#ffe066", "#7ac74f",
+    "#2a9d8f", "#3d6fb4", "#7b5ea7", "#d1495b", "#b56576", "#8d8d8d"
+  ];
+
+  var canvas = document.getElementById("dot");
+  var ctx = canvas.getContext("2d");
+  var paletteEl = document.getElementById("palette");
+  var statusEl = document.getElementById("status");
+
+  var cells = new Int16Array(N * N);
+  for (var i = 0; i < cells.length; i++) cells[i] = -1;
+
+  var color = 0;
+  var eraser = false;
+  var mirror = true;
+  var cell = 24;
+  var dpr = 1;
+  var hover = -1;
+  var drawing = false;
+
+  function resize() {
+    var avail = Math.min(420, Math.max(240, canvas.parentElement.clientWidth - 28));
+    cell = Math.max(14, Math.floor(avail / N));
+    var size = cell * N;
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = Math.round(size * dpr);
+    canvas.height = Math.round(size * dpr);
+    canvas.style.width = size + "px";
+    canvas.style.height = size + "px";
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    draw();
+  }
+
+  function draw() {
+    var size = cell * N;
+    ctx.clearRect(0, 0, size, size);
+
+    // 背景（市松）
+    for (var y = 0; y < N; y++) {
+      for (var x = 0; x < N; x++) {
+        var i = y * N + x;
+        var dark = (x + y) % 2 === 0;
+        if (cells[i] >= 0) {
+          ctx.fillStyle = COLORS[cells[i]];
+        } else {
+          ctx.fillStyle = dark ? "#141822" : "#10141c";
+        }
+        ctx.fillRect(x * cell, y * cell, cell, cell);
+      }
+    }
+
+    // グリッド
+    ctx.strokeStyle = "rgba(238,241,246,.07)";
+    ctx.lineWidth = 1;
+    for (var g = 0; g <= N; g++) {
+      ctx.beginPath();
+      ctx.moveTo(g * cell + 0.5, 0);
+      ctx.lineTo(g * cell + 0.5, size);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0, g * cell + 0.5);
+      ctx.lineTo(size, g * cell + 0.5);
+      ctx.stroke();
+    }
+
+    if (hover >= 0) {
+      var hx = hover % N;
+      var hy = Math.floor(hover / N);
+      ctx.strokeStyle = "rgba(255,210,63,.9)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(hx * cell + 1, hy * cell + 1, cell - 2, cell - 2);
+    }
+  }
+
+  function setCell(x, y, v) {
+    if (x < 0 || y < 0 || x >= N || y >= N) return;
+    cells[y * N + x] = v;
+    if (mirror) cells[y * N + (N - 1 - x)] = v;
+  }
+
+  function posOf(e) {
+    var rect = canvas.getBoundingClientRect();
+    return {
+      x: Math.floor((e.clientX - rect.left) / rect.width * N),
+      y: Math.floor((e.clientY - rect.top) / rect.height * N)
+    };
+  }
+
+  function paint(e) {
+    var p = posOf(e);
+    setCell(p.x, p.y, eraser ? -1 : color);
+    hover = p.y * N + p.x;
+    draw();
+  }
+
+  canvas.addEventListener("pointerdown", function (e) {
+    e.preventDefault();
+    drawing = true;
+    if (canvas.setPointerCapture) {
+      try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+    }
+    paint(e);
+  });
+  canvas.addEventListener("pointermove", function (e) {
+    var p = posOf(e);
+    hover = p.y * N + p.x;
+    if (drawing) paint(e);
+    else draw();
+  });
+  function endDraw() { drawing = false; }
+  canvas.addEventListener("pointerup", endDraw);
+  canvas.addEventListener("pointercancel", endDraw);
+  canvas.addEventListener("pointerleave", function () { drawing = false; hover = -1; draw(); });
+  canvas.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+
+  // ---- 型紙 ----
+  function clearAll() {
+    for (var i = 0; i < cells.length; i++) cells[i] = -1;
+  }
+
+  function stampHeart() {
+    clearAll();
+    for (var y = 0; y < N; y++) {
+      for (var x = 0; x < N; x++) {
+        var nx = (x + 0.5 - N / 2) / (N * 0.36);
+        var ny = (N * 0.52 - (y + 0.5)) / (N * 0.36);
+        var q = nx * nx + ny * ny - 1;
+        if (q * q * q - nx * nx * ny * ny * ny <= 0) cells[y * N + x] = 9;
+      }
+    }
+    draw();
+  }
+
+  function inStar(px, py) {
+    var cx = N / 2, cy = N / 2 + 1, R = N * 0.45, r = R * 0.44;
+    var pts = [];
+    for (var i = 0; i < 10; i++) {
+      var ang = -Math.PI / 2 + i * Math.PI / 5;
+      var rad = i % 2 === 0 ? R : r;
+      pts.push([cx + Math.cos(ang) * rad, cy + Math.sin(ang) * rad]);
+    }
+    var inside = false;
+    for (var a = 0, b = pts.length - 1; a < pts.length; b = a++) {
+      var xi = pts[a][0], yi = pts[a][1], xj = pts[b][0], yj = pts[b][1];
+      if (((yi > py) !== (yj > py)) && (px < (xj - xi) * (py - yi) / (yj - yi) + xi)) inside = !inside;
+    }
+    return inside;
+  }
+
+  function stampStar() {
+    clearAll();
+    for (var y = 0; y < N; y++) {
+      for (var x = 0; x < N; x++) {
+        if (inStar(x + 0.5, y + 0.5)) cells[y * N + x] = 4;
+      }
+    }
+    draw();
+  }
+
+  function stampMush() {
+    clearAll();
+    var capCy = 6.6, capR = 6.2;
+    for (var y = 0; y < N; y++) {
+      for (var x = 0; x < N; x++) {
+        var dx = x + 0.5 - N / 2;
+        var dy = y + 0.5 - capCy;
+        var d = Math.sqrt(dx * dx + dy * dy);
+        if (dy < 0.4 && d <= capR) {
+          cells[y * N + x] = 2;
+        } else if (dy < 0.4 && d <= capR * 0.62) {
+          cells[y * N + x] = 1;
+        }
+      }
+    }
+    // かさの点
+    [[6, 3], [9, 3], [4, 5], [11, 5], [7, 5]].forEach(function (p) {
+      cells[p[1] * N + p[0]] = 1;
+    });
+    // 軸
+    for (var yy = 9; yy < 15; yy++) {
+      for (var xx = 6; xx <= 9; xx++) cells[yy * N + xx] = 1;
+    }
+    draw();
+  }
+
+  function stampRandom() {
+    for (var i = 0; i < cells.length; i++) {
+      cells[i] = Math.random() < 0.42 ? Math.floor(Math.random() * COLORS.length) : -1;
+    }
+    draw();
+  }
+
+  // ---- UI ----
+  COLORS.forEach(function (c, i) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.style.background = c;
+    b.setAttribute("aria-label", "色 " + (i + 1));
+    b.setAttribute("aria-pressed", i === 0 ? "true" : "false");
+    b.addEventListener("click", function () {
+      color = i;
+      eraser = false;
+      eraserBtn.setAttribute("aria-pressed", "false");
+      document.querySelectorAll("#palette button").forEach(function (x, j) {
+        x.setAttribute("aria-pressed", j === i ? "true" : "false");
+      });
+      statusEl.textContent = "色 " + (i + 1) + " を選びました。";
+    });
+    paletteEl.appendChild(b);
+  });
+
+  var eraserBtn = document.getElementById("eraser");
+  var mirrorBtn = document.getElementById("mirror");
+
+  eraserBtn.addEventListener("click", function () {
+    eraser = !eraser;
+    eraserBtn.setAttribute("aria-pressed", eraser ? "true" : "false");
+    statusEl.textContent = eraser ? "消しゴム中。" : "ペンに戻しました。";
+  });
+
+  mirrorBtn.addEventListener("click", function () {
+    mirror = !mirror;
+    mirrorBtn.setAttribute("aria-pressed", mirror ? "true" : "false");
+    statusEl.textContent = mirror ? "左右対称で描きます。" : "自由に描きます。";
+  });
+
+  document.getElementById("clear").addEventListener("click", function () {
+    clearAll();
+    draw();
+    statusEl.textContent = "まっさらにしました。";
+  });
+
+  document.getElementById("heart").addEventListener("click", function () { stampHeart(); statusEl.textContent = "ハートを置きました。"; });
+  document.getElementById("star").addEventListener("click", function () { stampStar(); statusEl.textContent = "ほしを置きました。"; });
+  document.getElementById("mush").addEventListener("click", function () { stampMush(); statusEl.textContent = "きのこを置きました。"; });
+  document.getElementById("random").addEventListener("click", function () { stampRandom(); statusEl.textContent = "ランダムに置きました。"; });
+
+  document.getElementById("save").addEventListener("click", function () {
+    var small = document.createElement("canvas");
+    small.width = N;
+    small.height = N;
+    var sctx = small.getContext("2d");
+    var img = sctx.createImageData(N, N);
+    for (var i = 0; i < cells.length; i++) {
+      var o = i * 4;
+      if (cells[i] < 0) {
+        img.data[o + 3] = 0;
+        continue;
+      }
+      var hex = COLORS[cells[i]];
+      img.data[o] = parseInt(hex.slice(1, 3), 16);
+      img.data[o + 1] = parseInt(hex.slice(3, 5), 16);
+      img.data[o + 2] = parseInt(hex.slice(5, 7), 16);
+      img.data[o + 3] = 255;
+    }
+    sctx.putImageData(img, 0, 0);
+
+    var big = document.createElement("canvas");
+    big.width = 512;
+    big.height = 512;
+    var bctx = big.getContext("2d");
+    bctx.imageSmoothingEnabled = false;
+    bctx.drawImage(small, 0, 0, 512, 512);
+
+    big.toBlob(function (blob) {
+      if (!blob) {
+        statusEl.textContent = "PNGを作れませんでした。";
+        return;
+      }
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "dot-e.png";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+      statusEl.textContent = "PNGで保存しました。";
+    }, "image/png");
+  });
+
+  document.addEventListener("keydown", function (e) {
+    var tag = (e.target && e.target.tagName) || "";
+    if (tag === "BUTTON" || tag === "INPUT") return;
+    if (/^[1-9]$/.test(e.key)) {
+      var idx = Number(e.key) - 1;
+      var btn = paletteEl.children[idx];
+      if (btn) btn.click();
+    }
+  });
+
+  if (window.ResizeObserver) new ResizeObserver(resize).observe(canvas.parentElement);
+  else window.addEventListener("resize", resize);
+
+  resize();
+  stampHeart();
+  statusEl.textContent = "ハートから始めました。色を選んで、直してみてください。";
+})();
+</script>
+</body>
+</html>
