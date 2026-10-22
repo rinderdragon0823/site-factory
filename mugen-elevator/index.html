@@ -53,7 +53,7 @@
   .rail{position:absolute;top:0;bottom:0;width:8px;background:linear-gradient(180deg,#9aa6b2,#c3ccd4);}
   .rail.left{left:10px}
   .rail.right{right:10px}
-  .floors{position:absolute;left:26px;right:26px;top:0;height:100%}
+  .floors{position:absolute;left:26px;right:26px;top:0;height:100%;z-index:2}
   .floor{
     position:absolute;left:0;right:0;height:62px;
     display:flex;align-items:center;gap:12px;
@@ -83,7 +83,7 @@
   .floor.space .num{color:#9fb0ff}
 
   .marker{
-    position:absolute;left:6px;right:6px;top:50%;
+    position:absolute;left:6px;right:6px;top:50%;z-index:1;
     height:0;border-top:2px dashed rgba(231,154,19,.6);
     pointer-events:none;
   }
