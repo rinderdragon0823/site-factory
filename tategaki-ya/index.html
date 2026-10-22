@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>縦書き屋 — その言葉、縦にしたためる。</title>
+<meta name="description" content="名前でも、ひとことでも。入力した文字を縦書きの紙に組んで、PNGで保存できます。">
+<meta property="og:title" content="縦書き屋 — その言葉、縦にしたためる。">
+<meta property="og:description" content="入力するだけで、縦書きの和紙カードが完成。色紙・落款つき。PNG保存できます。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/tategaki-ya/">
+<meta property="og:site_name" content="縦書き屋">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#f6f0e2">
+<style>
+  :root{
+    --paper:#f6f0e2;
+    --ink:#221d17;
+    --muted:#847867;
+    --accent:#b5342a;
+    --line:rgba(34,29,23,.16);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 500px at 100% -10%, #ffe9cd 0%, transparent 60%),
+      radial-gradient(700px 420px at -10% 110%, #ecefe2 0%, transparent 55%),
+      var(--paper);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+  }
+  .wrap{max-width:720px;margin:auto;width:100%;padding:20px 16px calc(26px + env(safe-area-inset-bottom))}
+  .kicker{margin:0;font-size:10px;letter-spacing:.3em;color:var(--accent);font-weight:800}
+  h1{margin:.26em 0 .1em;font-size:clamp(1.8rem,7vw,2.5rem);letter-spacing:-.02em;line-height:1.08}
+  .lead{margin:0 0 12px;font-size:12.5px;color:var(--muted);line-height:1.65}
+
+  .stage{display:flex;justify-content:center}
+  #paper{
+    display:block;width:100%;max-width:430px;height:auto;
+    border:2px solid var(--ink);border-radius:6px;
+    box-shadow:0 18px 40px rgba(34,29,23,.22);
+    background:#fffdf6;
+  }
+
+  .entry{margin-top:14px}
+  #text{
+    width:100%;height:70px;resize:none;
+    font:inherit;font-size:16px;font-weight:600;line-height:1.6;letter-spacing:.06em;
+    color:var(--ink);background:#fffdf8;
+    border:1.5px solid var(--ink);border-radius:12px;
+    padding:10px 12px;outline:none;
+  }
+  #text:focus{box-shadow:0 0 0 3px rgba(181,52,42,.18)}
+
+  .row{display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap}
+  .row label{font-size:10.5px;font-weight:800;letter-spacing:.14em;color:var(--muted)}
+  #size{flex:1;accent-color:var(--accent);min-width:120px}
+  #sizeVal{font-size:11px;color:var(--muted);min-width:2.6em;text-align:right;font-variant-numeric:tabular-nums}
+
+  .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .actions button{
+    flex:1 1 30%;min-height:48px;
+    font:inherit;font-size:13px;font-weight:800;
+    color:var(--ink);background:#fffdf8;
+    border:1.5px solid var(--line);border-radius:11px;
+    padding:10px 12px;cursor:pointer;
+    transition:border-color .15s,background .15s,color .15s;
+  }
+  .actions button:hover{border-color:var(--ink)}
+  .actions button[aria-pressed="true"]{background:var(--ink);color:#f6f0e2;border-color:var(--ink)}
+  .actions button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+  .actions .save{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .actions .save:hover{background:#9c2b22}
+
+  .status{margin:10px 0 0;font-size:11.5px;color:var(--accent);min-height:1.3em}
+  .note{margin-top:10px;font-size:10.5px;color:rgba(34,29,23,.45);line-height:1.7}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <p class="kicker">TATEGAKI</p>
+  <h1>縦書き屋</h1>
+  <p class="lead">名前でも、ひとことでも。入力した言葉を縦書きの紙にしたためます。</p>
+
+  <div class="stage">
+    <canvas id="paper" width="700" height="900" role="img" aria-label="縦書きに組まれたカード"></canvas>
+  </div>
+
+  <div class="entry">
+    <label for="text" class="sr" style="position:absolute;left:-9999px">縦書きにする文字</label>
+    <textarea id="text" maxlength="60" spellcheck="false">秋の夜長に、読書でも。</textarea>
+  </div>
+
+  <div class="row">
+    <label for="size">文字の大きさ</label>
+    <input id="size" type="range" min="28" max="64" value="52" step="2">
+    <span id="sizeVal">52</span>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="paperBtn" aria-pressed="false">色紙</button>
+    <button type="button" id="sealBtn" aria-pressed="true">落款</button>
+    <button type="button" class="save" id="save">PNGで保存</button>
+  </div>
+
+  <p class="status" id="status" aria-live="polite">文字を変えると、その場で組み直します。</p>
+  <p class="note">改行を入れると、そこで次の列に移ります。60文字まで。PNGは700×900pxです。</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var canvas = document.getElementById("paper");
+  var ctx = canvas.getContext("2d");
+  var input = document.getElementById("text");
+  var sizeInput = document.getElementById("size");
+  var sizeVal = document.getElementById("sizeVal");
+  var paperBtn = document.getElementById("paperBtn");
+  var sealBtn = document.getElementById("sealBtn");
+  var statusEl = document.getElementById("status");
+
+  var W = 700, H = 900;
+  var SERIF = '"Yu Mincho","YuMincho","Hiragino Mincho ProN","Noto Serif JP",serif';
+
+  var PAPERS = [
+    { bg: "#fdfaf1", ink: "#241f18", frame: "rgba(36,31,24,.35)", seal: "#b5342a", sealInk: "#fdfaf1" },
+    { bg: "#f0e3c6", ink: "#2a2118", frame: "rgba(42,33,24,.4)", seal: "#a8322a", sealInk: "#f7efd9" },
+    { bg: "#1d1a16", ink: "#f1e7d2", frame: "rgba(241,231,210,.35)", seal: "#c0392b", sealInk: "#f7efd9" }
+  ];
+  var paperIndex = 0;
+  var sealOn = true;
+
+  var PUNCT = "、。，．";
+  var ROTATE = "「」『』（）ー…―";
+
+  function paper() { return PAPERS[paperIndex]; }
+
+  function columnsOf(text, perCol) {
+    var cols = [];
+    var cur = [];
+    var chars = Array.from(text);
+    for (var i = 0; i < chars.length; i++) {
+      var ch = chars[i];
+      if (ch === "\n") {
+        cols.push(cur);
+        cur = [];
+        continue;
+      }
+      cur.push(ch);
+      if (cur.length >= perCol) {
+        cols.push(cur);
+        cur = [];
+      }
+    }
+    if (cur.length) cols.push(cur);
+    if (!cols.length) cols.push([]);
+    return cols;
+  }
+
+  function layout(text, baseSize) {
+    var marginX = 64, marginY = 78;
+    var size = baseSize;
+    var cell, perCol, cols, blockW;
+    for (var attempt = 0; attempt < 24; attempt++) {
+      cell = size * 1.1;
+      perCol = Math.max(2, Math.floor((H - marginY * 2) / (size * 1.06)));
+      cols = columnsOf(text, perCol);
+      blockW = cols.length * cell;
+      if (blockW <= W - marginX * 2) break;
+      size -= 2;
+      if (size < 22) { size = 22; break; }
+    }
+    return { size: size, cell: cell, cols: cols, marginX: marginX, marginY: marginY };
+  }
+
+  function drawPaper(p) {
+    ctx.fillStyle = p.bg;
+    ctx.fillRect(0, 0, W, H);
+
+    // かすかな繊維
+    ctx.save();
+    ctx.globalAlpha = 0.06;
+    ctx.strokeStyle = p.ink;
+    ctx.lineWidth = 1;
+    for (var i = 0; i < 90; i++) {
+      var y = (i * 37.7) % H;
+      var x = (i * 91.3) % W;
+      var len = 20 + ((i * 17) % 60);
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + len, y + ((i % 3) - 1));
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    ctx.strokeStyle = p.frame;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(26, 26, W - 52, H - 52);
+  }
+
+  function drawSeal(p, x, y, size, ch) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(-0.04);
+    ctx.fillStyle = p.seal;
+    var s = size;
+    ctx.beginPath();
+    ctx.moveTo(-s / 2 + 6, -s / 2);
+    ctx.arcTo(s / 2, -s / 2, s / 2, s / 2, 6);
+    ctx.arcTo(s / 2, s / 2, -s / 2, s / 2, 6);
+    ctx.arcTo(-s / 2, s / 2, -s / 2, -s / 2, 6);
+    ctx.arcTo(-s / 2, -s / 2, s / 2, -s / 2, 6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = p.sealInk;
+    ctx.font = "700 " + Math.round(s * 0.62) + "px " + SERIF;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(ch, 0, 2);
+    ctx.restore();
+  }
+
+  function draw() {
+    var text = String(input.value || "").trim();
+    if (!text) text = "縦書き";
+    var p = paper();
+    var base = Number(sizeInput.value) || 52;
+    var L = layout(text, base);
+
+    drawPaper(p);
+
+    ctx.fillStyle = p.ink;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = "600 " + L.size + "px " + SERIF;
+
+    var right = W - L.marginX - L.size * 0.55;
+    var top = L.marginY + L.size * 0.6;
+
+    L.cols.forEach(function (col, ci) {
+      var x = right - ci * L.cell;
+      col.forEach(function (ch, ri) {
+        var y = top + ri * L.size * 1.06;
+        if (PUNCT.indexOf(ch) >= 0) {
+          ctx.font = "600 " + Math.round(L.size * 0.9) + "px " + SERIF;
+          ctx.fillText(ch, x + L.size * 0.3, y - L.size * 0.34);
+          ctx.font = "600 " + L.size + "px " + SERIF;
+        } else if (ROTATE.indexOf(ch) >= 0) {
+          ctx.save();
+          ctx.translate(x, y);
+          ctx.rotate(Math.PI / 2);
+          ctx.fillText(ch, 0, 0);
+          ctx.restore();
+        } else {
+          ctx.fillText(ch, x, y);
+        }
+      });
+    });
+
+    if (sealOn) {
+      var sealX = W - L.marginX - (L.cols.length - 1) * L.cell - L.size * 1.45;
+      sealX = Math.max(70, Math.min(W - 70, sealX));
+      drawSeal(p, sealX, H - 96, L.size * 1.05, Array.from(text)[0] || "印");
+    }
+
+    sizeVal.textContent = String(Math.round(L.size));
+    statusEl.textContent = L.cols.length + "列 ／ " + Array.from(text.replace(/\n/g, "")).length + "文字";
+  }
+
+  function setPaper(i) {
+    paperIndex = i;
+    paperBtn.setAttribute("aria-pressed", i === 2 ? "true" : "false");
+    paperBtn.textContent = i === 0 ? "色紙" : i === 1 ? "生成り" : "墨";
+    draw();
+  }
+
+  paperBtn.addEventListener("click", function () {
+    setPaper((paperIndex + 1) % PAPERS.length);
+  });
+
+  sealBtn.addEventListener("click", function () {
+    sealOn = !sealOn;
+    sealBtn.setAttribute("aria-pressed", sealOn ? "true" : "false");
+    draw();
+  });
+
+  sizeInput.addEventListener("input", draw);
+  input.addEventListener("input", draw);
+
+  document.getElementById("save").addEventListener("click", function () {
+    canvas.toBlob(function (blob) {
+      if (!blob) {
+        statusEl.textContent = "PNGを作れませんでした。";
+        return;
+      }
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "tategaki.png";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+      statusEl.textContent = "PNGで保存しました。";
+    }, "image/png");
+  });
+
+  draw();
+})();
+</script>
+</body>
+</html>
