@@ -71,6 +71,9 @@
   }
   .controls .topple:hover{background:#d14a24}
   .controls .topple:active{transform:translate(2px,2px);box-shadow:2px 2px 0 var(--ink)}
+  .length{display:flex;align-items:center;gap:10px;margin-top:12px;font-size:12px;font-weight:800;letter-spacing:.08em;color:var(--muted)}
+  .length input[type=range]{flex:1;min-width:0;height:30px;accent-color:var(--accent);cursor:pointer}
+  .length output{min-width:3.2em;text-align:right;font-variant-numeric:tabular-nums;color:var(--ink);letter-spacing:0}
   .status{margin:12px 0 0;font-size:12px;color:var(--muted);min-height:1.4em}
   .status b{color:var(--ink)}
   .hint{margin-top:8px;font-size:11px;color:rgba(36,31,26,.45);line-height:1.7}
@@ -95,8 +98,14 @@
     <button type="button" id="reset">リセット</button>
   </div>
 
+  <div class="length">
+    <label for="length">長さ</label>
+    <input id="length" type="range" min="48" max="100" step="4" value="66" aria-label="ドミノの長さ">
+    <output id="lengthVal" for="length">66</output>
+  </div>
+
   <p class="status" id="status" aria-live="polite">まずは「並べる」から。</p>
-  <p class="hint">ドミノはタップした位置に追加できます（最大90枚）。「倒す」で、重力と衝突で連鎖する物理演算が走ります。倒れたあとにもう一度押すと、立ち直ってからまた倒れます。</p>
+  <p class="hint">ドミノはタップした位置に追加できます（最大90枚）。スライダーで長さを変えると、背の高いドミノは少ない枚数でも遠くまで届きます。「倒す」で、重力と衝突で連鎖する物理演算が走ります。倒れたあとにもう一度押すと、立ち直ってからまた倒れます。</p>
 </main>
 
 <script>
@@ -112,6 +121,8 @@
 
   var COLORS = ["#e4572e", "#f2b134", "#2a9d8f", "#3d6fb4", "#d1495b", "#7b5ea7", "#4f9d69", "#e08a2e"];
   var DW = 27, DH = 66;
+  var dominoH = DH;
+  var scene = { count: 20, w: DW, h: DH, mode: "line" };
   var MAX = 90;
   var HALF_PI = Math.PI / 2;
 
@@ -181,7 +192,7 @@
     ctx.closePath();
   }
 
-  function rebuild(count, w, h) {
+  function rebuild(count, w, h, mode) {
     bodies = [];
     running = false;
     finished = false;
@@ -193,7 +204,8 @@
     for (var i = 0; i < count; i++) {
       bodies.push(makeBody(margin + step * i, w, h, COLORS[i % COLORS.length]));
     }
-    statusEl.textContent = count + "枚、並べました。「倒す」を押してください。";
+    scene = { count: count, w: w, h: h, mode: mode || "custom" };
+    statusEl.textContent = count + "枚、長さ" + h + "で並べました。「倒す」を押してください。";
   }
 
   function addDomino(x) {
@@ -208,8 +220,9 @@
         return;
       }
     }
-    bodies.push(makeBody(px, DW, DH, COLORS[bodies.length % COLORS.length]));
+    bodies.push(makeBody(px, DW, dominoH, COLORS[bodies.length % COLORS.length]));
     bodies.sort(function (a, b) { return a.x - b.x; });
+    scene = { count: bodies.length, w: DW, h: dominoH, mode: "custom" };
     statusEl.textContent = bodies.length + "枚。タップで追加、「倒す」で連鎖。";
   }
 
@@ -409,8 +422,21 @@
     requestAnimationFrame(loop);
   }
 
-  document.getElementById("line").addEventListener("click", function () { rebuild(20, DW, DH); });
-  document.getElementById("dense").addEventListener("click", function () { rebuild(26, 18, 52); });
+  function buildLine() { rebuild(20, DW, dominoH, "line"); }
+  function buildDense() { rebuild(26, 18, Math.round(dominoH * 0.79), "dense"); }
+
+  document.getElementById("line").addEventListener("click", buildLine);
+  document.getElementById("dense").addEventListener("click", buildDense);
+
+  var lengthEl = document.getElementById("length");
+  var lengthVal = document.getElementById("lengthVal");
+  lengthEl.addEventListener("input", function () {
+    dominoH = parseInt(lengthEl.value, 10) || DH;
+    lengthVal.textContent = dominoH;
+    if (!bodies.length || running) return;
+    if (scene.mode === "line") rebuild(scene.count, DW, dominoH, "line");
+    else if (scene.mode === "dense") rebuild(scene.count, 18, Math.round(dominoH * 0.79), "dense");
+  });
   document.getElementById("reset").addEventListener("click", function () {
     bodies = [];
     running = false;

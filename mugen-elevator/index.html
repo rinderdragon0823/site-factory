@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>無限エレベーター — 押すたび、上へ。</title>
+<meta name="description" content="上へボタンを押すたび、見たことのない階があらわれる無限エレベーター。何階まで行けるか、試してみてください。">
+<meta property="og:title" content="無限エレベーター — 押すたび、上へ。">
+<meta property="og:description" content="押すだけで無限に上がるエレベーター。変な階がどんどん出てきます。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/mugen-elevator/">
+<meta property="og:site_name" content="無限エレベーター">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#eef1f4">
+<style>
+  :root{
+    --paper:#eef1f4;
+    --panel:#dfe5ea;
+    --ink:#1b2430;
+    --muted:#6d7a88;
+    --amber:#e79a13;
+    --line:rgba(27,36,48,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 500px at 100% -10%, #fff3d6 0%, transparent 60%),
+      radial-gradient(700px 420px at -10% 110%, #e3e9ef 0%, transparent 55%),
+      var(--paper);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:640px;margin:auto;width:100%;padding:20px 16px calc(26px + env(safe-area-inset-bottom))}
+  .kicker{margin:0;font-size:10px;letter-spacing:.3em;color:var(--amber);font-weight:800}
+  h1{margin:.26em 0 .1em;font-size:clamp(1.7rem,6.6vw,2.4rem);letter-spacing:-.02em;line-height:1.08}
+  .lead{margin:0 0 12px;font-size:12.5px;color:var(--muted);line-height:1.65}
+
+  .shaft{
+    position:relative;
+    height:clamp(300px,46vh,460px);
+    border-radius:16px;
+    border:2px solid var(--ink);
+    background:linear-gradient(180deg,#cfd7de,#e6ebef 40%,#cfd7de);
+    box-shadow:inset 0 0 40px rgba(27,36,48,.18), 0 14px 34px rgba(27,36,48,.18);
+    overflow:hidden;
+  }
+  .rail{position:absolute;top:0;bottom:0;width:8px;background:linear-gradient(180deg,#9aa6b2,#c3ccd4);}
+  .rail.left{left:10px}
+  .rail.right{right:10px}
+  .floors{position:absolute;left:26px;right:26px;top:0;height:100%}
+  .floor{
+    position:absolute;left:0;right:0;height:62px;
+    display:flex;align-items:center;gap:12px;
+    padding:0 12px;
+    border-radius:10px;
+    background:rgba(255,255,255,.55);
+    border:1px solid var(--line);
+    transition:transform .5s cubic-bezier(.2,.75,.3,1), background .3s, border-color .3s;
+    will-change:transform;
+  }
+  .floor .num{
+    flex:none;width:52px;text-align:right;
+    font-size:13px;font-weight:900;letter-spacing:.02em;
+    color:var(--muted);font-variant-numeric:tabular-nums;
+  }
+  .floor .txt{font-size:13.5px;font-weight:700;line-height:1.35}
+  .floor.now{
+    background:#fff8e6;
+    border-color:var(--amber);
+    box-shadow:0 0 0 2px rgba(231,154,19,.35), 0 6px 18px rgba(231,154,19,.2);
+  }
+  .floor.now .num{color:var(--ink)}
+  .floor.special{background:rgba(255,236,236,.85);border-color:rgba(200,60,60,.4)}
+  .floor.special .txt{color:#9c2b22}
+  .floor.space{background:rgba(28,32,60,.86);border-color:rgba(255,255,255,.2)}
+  .floor.space .txt{color:#e8ecff}
+  .floor.space .num{color:#9fb0ff}
+
+  .marker{
+    position:absolute;left:6px;right:6px;top:50%;
+    height:0;border-top:2px dashed rgba(231,154,19,.6);
+    pointer-events:none;
+  }
+  .car{
+    position:absolute;left:12px;top:50%;transform:translateY(-50%);
+    font-size:18px;pointer-events:none;
+  }
+
+  .hud{display:flex;justify-content:space-between;align-items:baseline;margin-top:12px;gap:10px}
+  .hud .big{font-size:clamp(1.8rem,7vw,2.4rem);font-weight:900;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+  .hud .big small{font-size:.42em;font-weight:800;color:var(--muted);margin-left:4px;letter-spacing:0}
+  .hud .side{font-size:11px;color:var(--muted);text-align:right;line-height:1.6}
+  .hud .side b{color:var(--ink);font-size:13px;font-variant-numeric:tabular-nums}
+
+  .controls{display:flex;gap:8px;margin-top:10px}
+  .controls button{
+    font:inherit;font-weight:900;border-radius:12px;cursor:pointer;
+    transition:transform .08s,box-shadow .08s,background .15s,color .15s;
+  }
+  #up{
+    flex:1;font-size:17px;letter-spacing:.08em;
+    color:#241a06;background:var(--amber);
+    border:2px solid var(--ink);box-shadow:4px 4px 0 var(--ink);
+    padding:15px;min-height:58px;
+  }
+  #up:active{transform:translate(3px,3px);box-shadow:1px 1px 0 var(--ink)}
+  #auto{
+    flex:0 0 108px;font-size:13px;
+    color:var(--ink);background:#fff;
+    border:1.5px solid var(--line);
+    padding:12px 10px;min-height:58px;
+  }
+  #auto[aria-pressed="true"]{background:var(--ink);color:#eef1f4;border-color:var(--ink)}
+  #auto:hover{border-color:var(--ink)}
+  .controls button:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+
+  .status{margin:10px 0 0;font-size:11.5px;color:var(--muted);min-height:1.4em;line-height:1.5}
+  .note{margin-top:10px;font-size:10.5px;color:rgba(27,36,48,.45);line-height:1.7}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <p class="kicker">ENDLESS ELEVATOR</p>
+  <h1>無限エレベーター</h1>
+  <p class="lead">上へを押すたび、見たことのない階があらわれます。何階まであるのかは、誰も知りません。</p>
+
+  <div class="shaft" id="shaft" aria-label="エレベーターのかごの中">
+    <div class="rail left" aria-hidden="true"></div>
+    <div class="rail right" aria-hidden="true"></div>
+    <div class="floors" id="floors"></div>
+    <div class="marker" aria-hidden="true"></div>
+    <div class="car" aria-hidden="true">🛗</div>
+  </div>
+
+  <div class="hud">
+    <div class="big"><span id="floorNow">1</span><small>階</small></div>
+    <div class="side">のぼった階数 <b id="climbed">0</b><br>乗客 <b id="passengers">1</b> 人</div>
+  </div>
+
+  <div class="controls">
+    <button type="button" id="up">上へ</button>
+    <button type="button" id="auto" aria-pressed="false">自動</button>
+  </div>
+
+  <p class="status" id="status" aria-live="polite">1階。ボタンを押してください。</p>
+  <p class="note">Spaceキーでも上へ。自動を押すと勝手にのぼり続けます。止めたいときは、もう一度押してください。</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var URL = "https://rinderdragon0823.github.io/site-factory/mugen-elevator/";
+  var F = 62;
+
+  var FLOORS = [
+    "誰もいない。しずか。",
+    "ねこが乗ってきた。",
+    "観葉植物が増えた。",
+    "非常ベルが鳴った（気のせい）。",
+    "知らない人が降りていった。",
+    "ここは何階ですか。",
+    "BGMが少し変わった。",
+    "鏡が一枚増えた。",
+    "点検中。でも動いている。",
+    "誰かの忘れ物の傘。",
+    "カレーの匂いがする。",
+    "ボタンが全部光った。",
+    "満員。誰も降りない。",
+    "手すりが少し温かい。",
+    "床に落ちているレシート。",
+    "知らない言語のアナウンス。",
+    "ここで一度、休憩。",
+    "扉が開かない。",
+    "なぜか少しだけ速い。",
+    "同じ人がもう一度乗ってきた。",
+    "壁に小さな落書き。",
+    "非常用の電話が鳴っている。",
+    "冷房が効きすぎている。",
+    "屋上らしいが、屋上ではない。",
+    "誰かのため息。",
+    "エレベーターの中でエレベーターの話。"
+  ];
+
+  var SPECIAL = [
+    { t: "非常停止。3秒だけ止まる。", cls: "special" },
+    { t: "警報が鳴った。誰も慌てない。", cls: "special" },
+    { t: "ここは最上階です（と表示された）。", cls: "special" }
+  ];
+
+  var SPACE = [
+    { t: "宇宙。ここでいったん休憩。", cls: "space" },
+    { t: "星が見える。上は、まだある。", cls: "space" },
+    { t: "無重力。浮いている。", cls: "space" }
+  ];
+
+  var shaft = document.getElementById("shaft");
+  var floorsEl = document.getElementById("floors");
+  var floorNow = document.getElementById("floorNow");
+  var climbedEl = document.getElementById("climbed");
+  var passEl = document.getElementById("passengers");
+  var statusEl = document.getElementById("status");
+  var upBtn = document.getElementById("up");
+  var autoBtn = document.getElementById("auto");
+
+  var floors = [];
+  var current = 1;
+  var climbed = 0;
+  var passengers = 1;
+  var auto = false;
+  var timer = 0;
+  var off = 0;
+
+  function pick() {
+    var r = Math.random();
+    if (current > 60 && r < 0.12) return SPACE[Math.floor(Math.random() * SPACE.length)];
+    if (r < 0.09) return SPECIAL[Math.floor(Math.random() * SPECIAL.length)];
+    return { t: FLOORS[Math.floor(Math.random() * FLOORS.length)], cls: "" };
+  }
+
+  function makeFloor(n) {
+    var data = pick();
+    var el = document.createElement("div");
+    el.className = "floor" + (data.cls ? " " + data.cls : "");
+    var num = document.createElement("div");
+    num.className = "num";
+    num.textContent = n + "F";
+    var txt = document.createElement("div");
+    txt.className = "txt";
+    txt.textContent = data.t;
+    el.appendChild(num);
+    el.appendChild(txt);
+    return { el: el, n: n, data: data };
+  }
+
+  function layout(animate) {
+    var i;
+    for (i = 0; i < floors.length; i++) {
+      var f = floors[i];
+      var y = off - (f.n - current) * F;
+      f.el.style.transition = animate === false ? "none" : "";
+      f.el.style.transform = "translateY(" + y.toFixed(1) + "px)";
+      f.el.classList.toggle("now", f.n === current);
+    }
+    for (i = floors.length - 1; i >= 0; i--) {
+      var yy = off - (floors[i].n - current) * F;
+      if (yy > shaft.clientHeight + F * 1.5) {
+        floorsEl.removeChild(floors[i].el);
+        floors.splice(i, 1);
+      }
+    }
+  }
+
+  function ascend() {
+    current += 1;
+    climbed += 1;
+
+    var next = makeFloor(current);
+    next.el.style.transition = "none";
+    next.el.style.transform = "translateY(" + (off - F).toFixed(1) + "px)";
+    floorsEl.appendChild(next.el);
+    floors.push(next);
+
+    requestAnimationFrame(function () {
+      layout(true);
+    });
+
+    if (next.data.t.indexOf("乗ってきた") >= 0) passengers += 1;
+    if (next.data.t.indexOf("降りて") >= 0 && passengers > 1) passengers -= 1;
+
+    floorNow.textContent = String(current);
+    climbedEl.textContent = String(climbed);
+    passEl.textContent = String(passengers);
+
+    if (current === 10) statusEl.textContent = "10階。まだまだ上があります。";
+    else if (current === 25) statusEl.textContent = "25階。外の景色は、もう分かりません。";
+    else if (current === 50) statusEl.textContent = "50階。ここまで来ると、降りるのが大変です。";
+    else if (current === 100) statusEl.textContent = "100階。このエレベーター、どうなってるんでしょう。";
+    else statusEl.textContent = current + "階：" + next.data.t;
+  }
+
+  function setAuto(on) {
+    auto = on;
+    autoBtn.setAttribute("aria-pressed", on ? "true" : "false");
+    window.clearInterval(timer);
+    if (on) {
+      timer = window.setInterval(ascend, 780);
+      statusEl.textContent = "自動でのぼっています。";
+    }
+  }
+
+  upBtn.addEventListener("click", function () { ascend(); });
+  autoBtn.addEventListener("click", function () { setAuto(!auto); });
+
+  document.addEventListener("keydown", function (e) {
+    if (e.code === "Space" || e.key === "Enter") {
+      var tag = (e.target && e.target.tagName) || "";
+      if (tag === "BUTTON" || tag === "A") return;
+      e.preventDefault();
+      ascend();
+    }
+  });
+
+  function resize() {
+    off = Math.round(shaft.clientHeight / 2 - F / 2);
+    layout(false);
+  }
+
+  if (window.ResizeObserver) new ResizeObserver(resize).observe(shaft);
+  else window.addEventListener("resize", resize);
+
+  var first = makeFloor(1);
+  floorsEl.appendChild(first.el);
+  floors.push(first);
+  resize();
+  layout(false);
+  statusEl.textContent = "1階。ボタンを押してください。";
+})();
+</script>
+</body>
+</html>
