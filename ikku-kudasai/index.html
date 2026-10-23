@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>一句ください — その文章、5・7・5に切ります。</title>
+<meta name="description" content="入力した文章を、だいたい5・7・5に切り分けて一句にします。うまく切れないのも味です。">
+<meta property="og:title" content="一句ください — その文章、5・7・5に切ります。">
+<meta property="og:description" content="長い文章も、愚痴も、そのまま一句に。5・7・5に切るだけの一句メーカーです。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/ikku-kudasai/">
+<meta property="og:site_name" content="一句ください">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#f7f1e3">
+<style>
+  :root{
+    --paper:#f7f1e3;
+    --ink:#221c16;
+    --muted:#8a7c6b;
+    --accent:#b5342a;
+    --line:rgba(34,28,22,.16);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 500px at 100% -10%, #ffe9cd 0%, transparent 60%),
+      radial-gradient(700px 420px at -10% 110%, #e9f0e4 0%, transparent 55%),
+      var(--paper);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+  }
+  .wrap{max-width:520px;margin:auto;width:100%;padding:20px 16px calc(26px + env(safe-area-inset-bottom))}
+  .kicker{margin:0;font-size:10px;letter-spacing:.3em;color:var(--accent);font-weight:800}
+  h1{margin:.26em 0 .1em;font-size:clamp(1.7rem,6.6vw,2.3rem);letter-spacing:-.02em;line-height:1.08}
+  .lead{margin:0 0 12px;font-size:12.5px;color:var(--muted);line-height:1.65}
+
+  .card{
+    position:relative;
+    background:
+      repeating-linear-gradient(90deg, rgba(160,140,110,.05) 0 1px, transparent 1px 26px),
+      linear-gradient(180deg,#fffdf6,#f6eeda);
+    border:1.5px solid rgba(34,28,22,.35);
+    border-radius:8px;
+    padding:26px 24px 30px;
+    min-height:230px;
+    box-shadow:0 14px 34px rgba(34,28,22,.14);
+    display:flex;flex-direction:column;justify-content:center;
+  }
+  .card.swap{animation:swap .45s ease}
+  @keyframes swap{from{opacity:.2;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .line{
+    display:flex;align-items:baseline;gap:12px;
+    font-family:"Yu Mincho","YuMincho","Hiragino Mincho ProN","Noto Serif JP",serif;
+    font-weight:600;line-height:1.55;letter-spacing:.08em;
+    font-size:clamp(1.5rem,6.4vw,2rem);
+    margin:2px 0;
+    min-height:1.55em;
+  }
+  .line .no{flex:none;font-family:"Hiragino Sans",sans-serif;font-size:10px;letter-spacing:.16em;color:var(--accent);font-weight:800;width:28px}
+  .line .txt{word-break:break-all}
+  .line.empty .txt{color:rgba(34,28,22,.22)}
+  .seal{
+    position:absolute;right:18px;bottom:16px;
+    width:38px;height:38px;border-radius:6px;
+    background:var(--accent);color:#fdf8ee;
+    display:flex;align-items:center;justify-content:center;
+    font-family:"Yu Mincho",serif;font-size:20px;font-weight:700;
+    transform:rotate(-5deg);opacity:.9;
+  }
+  .meta{margin:10px 2px 0;font-size:10.5px;color:var(--muted);display:flex;justify-content:space-between;gap:10px}
+
+  .entry{margin-top:12px}
+  #text{
+    width:100%;height:74px;resize:none;
+    font:inherit;font-size:15px;font-weight:600;line-height:1.6;
+    color:var(--ink);background:#fffdf8;
+    border:1.5px solid var(--ink);border-radius:12px;
+    padding:10px 12px;outline:none;
+  }
+  #text:focus{box-shadow:0 0 0 3px rgba(181,52,42,.18)}
+
+  .chips{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}
+  .chips button{
+    font:inherit;font-size:11.5px;font-weight:700;color:var(--muted);
+    background:transparent;border:1px solid var(--line);border-radius:999px;
+    padding:7px 12px;min-height:34px;cursor:pointer;
+  }
+  .chips button:hover{color:var(--ink);border-color:var(--ink)}
+  .chips button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+  .actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+  .actions button,.actions a{
+    flex:1 1 40%;min-height:48px;
+    display:inline-flex;align-items:center;justify-content:center;
+    font:inherit;font-size:13.5px;font-weight:800;text-decoration:none;
+    border-radius:11px;padding:11px 12px;cursor:pointer;
+    transition:border-color .15s,background .15s,transform .08s;
+  }
+  #compose{flex:1 1 100%;color:#fdf8ee;background:var(--accent);border:2px solid var(--ink);box-shadow:4px 4px 0 var(--ink)}
+  #compose:active{transform:translate(2px,2px);box-shadow:2px 2px 0 var(--ink)}
+  .ghost{color:var(--ink);background:#fffdf8;border:1.5px solid var(--line)}
+  .ghost:hover{border-color:var(--ink)}
+  .actions button:focus-visible,.actions a:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+
+  .status{margin:10px 0 0;font-size:11.5px;color:var(--accent);min-height:1.3em}
+  .note{margin-top:8px;font-size:10.5px;color:rgba(34,28,22,.45);line-height:1.7}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <p class="kicker">5 / 7 / 5</p>
+  <h1>一句ください</h1>
+  <p class="lead">その文章、5・7・5に切ります。うまく切れないのも、味です。</p>
+
+  <div class="card" id="card" aria-live="polite">
+    <div class="line" id="l1"><span class="no">五</span><span class="txt">今日はとても</span></div>
+    <div class="line" id="l2"><span class="no">七</span><span class="txt">眠いので早く</span></div>
+    <div class="line" id="l3"><span class="no">五</span><span class="txt">帰りたい</span></div>
+    <div class="seal" aria-hidden="true">句</div>
+  </div>
+  <div class="meta"><span id="counts">5・7・5</span><span id="rest"></span></div>
+
+  <div class="entry">
+    <label for="text" style="position:absolute;left:-9999px">一句にする文章</label>
+    <textarea id="text" maxlength="80" spellcheck="false">今日はとても眠いので早く帰りたい</textarea>
+  </div>
+
+  <div class="chips" role="group" aria-label="例文">
+    <button type="button" data-text="会議が長引いて昼ごはんを逃した">会議が長い</button>
+    <button type="button" data-text="財布を忘れて家まで取りに帰った">財布を忘れた</button>
+    <button type="button" data-text="深夜のコンビニでなんとなくカレーを買う">深夜のコンビニ</button>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="compose">詠む</button>
+    <button type="button" class="ghost" id="copy">コピー</button>
+    <a class="ghost" id="tweet" href="#" target="_blank" rel="noopener">Xでシェア</a>
+  </div>
+
+  <p class="status" id="status" aria-live="polite"></p>
+  <p class="note">文字をだいたい音として数えて、5・7・5に切っています。小さい「ゃ」「ゅ」「ょ」は1音に数えません。句会には出さないでください。</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var URL = "https://rinderdragon0823.github.io/site-factory/ikku-kudasai/";
+  var SMALL = "ゃゅょっぁぃぅぇぉゎァィゥェォャュョッ";
+  var PUNCT = "、。，．！？!?…「」『』（）()";
+
+  var input = document.getElementById("text");
+  var card = document.getElementById("card");
+  var lines = [document.getElementById("l1"), document.getElementById("l2"), document.getElementById("l3")];
+  var countsEl = document.getElementById("counts");
+  var restEl = document.getElementById("rest");
+  var statusEl = document.getElementById("status");
+  var tweet = document.getElementById("tweet");
+  var current = ["", "", ""];
+
+  function units(text) {
+    var out = [];
+    Array.from(text).forEach(function (ch) {
+      if (/\s/.test(ch)) return;
+      if (PUNCT.indexOf(ch) >= 0) return;
+      if (SMALL.indexOf(ch) >= 0 && out.length) {
+        out[out.length - 1].ch += ch;
+        return;
+      }
+      out.push({ ch: ch, m: 1 });
+    });
+    return out;
+  }
+
+  function cut(text) {
+    var u = units(text);
+    var need = [5, 7, 5];
+    var res = [];
+    var i = 0;
+    need.forEach(function (n) {
+      var part = u.slice(i, i + n);
+      i += n;
+      res.push(part.map(function (x) { return x.ch; }).join(""));
+    });
+    return { lines: res, rest: Math.max(0, u.length - 17), total: u.length };
+  }
+
+  function setLine(el, text) {
+    el.querySelector(".txt").textContent = text || "—";
+    el.classList.toggle("empty", !text);
+  }
+
+  function compose(animate) {
+    var text = String(input.value || "").trim();
+    if (!text) {
+      input.focus();
+      statusEl.textContent = "なにか書いてください。";
+      return;
+    }
+    var r = cut(text);
+    current = r.lines;
+    r.lines.forEach(function (line, i) { setLine(lines[i], line); });
+    countsEl.textContent = r.lines.map(function (l) { return units(l).length; }).join("・");
+    restEl.textContent = r.rest > 0 ? "余り " + r.rest + " 音" : "";
+    statusEl.textContent = r.rest > 0 ? "入りきらない音は、切り捨てました。" : "一句、できました。";
+
+    if (animate !== false && !(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches)) {
+      card.classList.remove("swap");
+      void card.offsetWidth;
+      card.classList.add("swap");
+    }
+
+    var share = "【一句ください】\n" + r.lines.join("\n");
+    tweet.href = "https://twitter.com/intent/tweet?text=" + encodeURIComponent(share) + "&url=" + encodeURIComponent(URL);
+  }
+
+  document.getElementById("compose").addEventListener("click", function () { compose(true); });
+
+  document.querySelectorAll(".chips button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      input.value = b.getAttribute("data-text");
+      compose(true);
+    });
+  });
+
+  input.addEventListener("keydown", function (e) {
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+      e.preventDefault();
+      compose(true);
+    }
+  });
+
+  document.getElementById("copy").addEventListener("click", function () {
+    var text = "【一句ください】\n" + current.join("\n") + "\n" + URL;
+    copyText(text).then(function (ok) {
+      statusEl.textContent = ok ? "コピーしました。" : "コピーできませんでした。";
+    });
+  });
+
+  function copyText(text) {
+    return new Promise(function (resolve) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () { resolve(true); }, function () { resolve(fallbackCopy(text)); });
+      } else {
+        resolve(fallbackCopy(text));
+      }
+    });
+  }
+
+  function fallbackCopy(text) {
+    try {
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.top = "-1000px";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok;
+    } catch (e) { return false; }
+  }
+
+  compose(false);
+})();
+</script>
+</body>
+</html>
