@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>集中の木 — 25分で、ひとつ育つ。</title>
+<meta name="description" content="ポモドーロタイマー。集中している間、木がすこしずつ育ちます。25分・5分・10秒のおためしつき。">
+<meta property="og:title" content="集中の木 — 25分で、ひとつ育つ。">
+<meta property="og:description" content="集中するほど木が育つポモドーロタイマー。終わると花が咲きます。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/shuchu-no-ki/">
+<meta property="og:site_name" content="集中の木">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#f4f7ef">
+<style>
+  :root{
+    --paper:#f4f7ef;
+    --ink:#22301f;
+    --muted:#77836f;
+    --leaf:#3f7d4e;
+    --accent:#e07a5f;
+    --line:rgba(34,48,31,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 500px at 100% -10%, #fff2d8 0%, transparent 60%),
+      radial-gradient(700px 420px at -10% 110%, #e4efe0 0%, transparent 55%),
+      var(--paper);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+  }
+  .wrap{max-width:520px;margin:auto;width:100%;padding:20px 16px calc(26px + env(safe-area-inset-bottom))}
+  .kicker{margin:0;font-size:10px;letter-spacing:.3em;color:var(--leaf);font-weight:800}
+  h1{margin:.26em 0 .1em;font-size:clamp(1.7rem,6.6vw,2.3rem);letter-spacing:-.02em;line-height:1.08}
+  .lead{margin:0 0 10px;font-size:12.5px;color:var(--muted);line-height:1.65}
+
+  .stage{
+    position:relative;width:100%;max-width:400px;margin:0 auto;
+    aspect-ratio:1/1;
+  }
+  #tree{display:block;width:100%;height:100%}
+  .clock{
+    position:absolute;left:50%;top:36%;transform:translate(-50%,-50%);
+    text-align:center;pointer-events:none;
+  }
+  .clock b{
+    display:block;font-size:clamp(2.2rem,9vw,3rem);font-weight:900;letter-spacing:-.04em;
+    font-variant-numeric:tabular-nums;line-height:1;
+  }
+  .clock span{display:block;margin-top:6px;font-size:10px;letter-spacing:.22em;color:var(--muted);font-weight:800}
+
+  .modes{display:flex;gap:7px;justify-content:center;margin-top:8px;flex-wrap:wrap}
+  .modes button{
+    font:inherit;font-size:12px;font-weight:800;
+    color:var(--muted);background:transparent;
+    border:1.5px solid var(--line);border-radius:999px;
+    padding:8px 13px;min-height:38px;cursor:pointer;
+    transition:border-color .15s,background .15s,color .15s;
+  }
+  .modes button:hover{border-color:var(--ink);color:var(--ink)}
+  .modes button[aria-pressed="true"]{background:var(--leaf);color:#f7fbf4;border-color:var(--leaf)}
+  .modes button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+  .controls{display:flex;gap:8px;margin-top:12px}
+  #start{
+    flex:1;font:inherit;font-size:16px;font-weight:900;letter-spacing:.06em;
+    color:#f7fbf4;background:var(--leaf);border:2px solid #22301f;border-radius:13px;
+    padding:14px;min-height:54px;cursor:pointer;
+    box-shadow:4px 4px 0 #22301f;transition:transform .08s,box-shadow .08s,background .15s;
+  }
+  #start:active{transform:translate(2px,2px);box-shadow:2px 2px 0 #22301f}
+  #start.paused{background:var(--accent)}
+  #reset{
+    flex:0 0 96px;font:inherit;font-size:12.5px;font-weight:800;
+    color:var(--ink);background:#fffdf8;border:1.5px solid var(--line);border-radius:13px;
+    padding:12px;min-height:54px;cursor:pointer;
+  }
+  #reset:hover{border-color:var(--ink)}
+  .controls button:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+
+  .status{margin:10px 0 0;font-size:12px;color:var(--muted);text-align:center;min-height:1.4em}
+  .status b{color:var(--ink)}
+  .count{margin-top:6px;font-size:10.5px;color:rgba(34,48,31,.5);text-align:center}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <p class="kicker">POMODORO GARDEN</p>
+  <h1>集中の木</h1>
+  <p class="lead">集中している間、木がすこしずつ育ちます。終わったら、花が咲きます。</p>
+
+  <div class="stage">
+    <canvas id="tree" role="img" aria-label="集中の時間に合わせて育つ木"></canvas>
+    <div class="clock"><b id="time">25:00</b><span id="phase">FOCUS</span></div>
+  </div>
+
+  <div class="modes" role="group" aria-label="時間を選ぶ">
+    <button type="button" data-sec="1500" aria-pressed="true">25分</button>
+    <button type="button" data-sec="300" aria-pressed="false">5分</button>
+    <button type="button" data-sec="10" aria-pressed="false">10秒（おためし）</button>
+  </div>
+
+  <div class="controls">
+    <button type="button" id="start">はじめる</button>
+    <button type="button" id="reset">リセット</button>
+  </div>
+
+  <p class="status" id="status" aria-live="polite">25分、集中してみてください。</p>
+  <p class="count" id="count">これまでに咲いた花：0</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var canvas = document.getElementById("tree");
+  var ctx = canvas.getContext("2d");
+  var timeEl = document.getElementById("time");
+  var phaseEl = document.getElementById("phase");
+  var statusEl = document.getElementById("status");
+  var countEl = document.getElementById("count");
+  var startBtn = document.getElementById("start");
+
+  var W = 400, H = 400, dpr = 1;
+  var total = 1500;
+  var remaining = 1500;
+  var running = false;
+  var endAt = 0;
+  var blooms = 0;
+  var confetti = [];
+  var completeAt = 0;
+
+  try {
+    blooms = Number(window.localStorage.getItem("shuchu_blooms") || 0) || 0;
+  } catch (e) { blooms = 0; }
+
+  function fmt(sec) {
+    sec = Math.max(0, Math.ceil(sec));
+    var m = Math.floor(sec / 60);
+    var s = sec % 60;
+    return m + ":" + (s < 10 ? "0" : "") + s;
+  }
+
+  function updateCount() {
+    countEl.textContent = "これまでに咲いた花：" + blooms;
+  }
+
+  function resize() {
+    var rect = canvas.parentElement.getBoundingClientRect();
+    W = Math.max(260, Math.round(rect.width));
+    H = W;
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
+  }
+
+  function progress() {
+    if (total <= 0) return 0;
+    return Math.min(1, Math.max(0, 1 - remaining / total));
+  }
+
+  function drawPlant(p, t) {
+    var cx = W / 2;
+    var baseY = H * 0.80;
+    var sway = Math.sin(t / 900) * (2 + p * 3);
+
+    // 土
+    ctx.fillStyle = "rgba(120,96,64,.22)";
+    ctx.beginPath();
+    ctx.ellipse(cx, baseY + 6, W * 0.17, 10, 0, 0, 6.283);
+    ctx.fill();
+
+    if (p <= 0.001) {
+      // 種
+      ctx.fillStyle = "#7a5a3a";
+      ctx.beginPath();
+      ctx.ellipse(cx, baseY - 3, 5, 7, 0.3, 0, 6.283);
+      ctx.fill();
+      return;
+    }
+
+    var h = 12 + p * H * 0.30;
+    var topX = cx + sway;
+    var topY = baseY - h;
+
+    // 茎
+    ctx.strokeStyle = "#3f7d4e";
+    ctx.lineWidth = Math.max(2, 3 + p * 2);
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(cx, baseY);
+    ctx.quadraticCurveTo(cx - sway * 0.4, baseY - h * 0.55, topX, topY);
+    ctx.stroke();
+
+    // 葉
+    var leafCount = p > 0.15 ? 1 : 0;
+    if (p > 0.35) leafCount = 2;
+    if (p > 0.6) leafCount = 3;
+    for (var i = 0; i < leafCount; i++) {
+      var ly = baseY - h * (0.28 + i * 0.22);
+      var side = i % 2 === 0 ? -1 : 1;
+      var size = 9 + p * 6;
+      ctx.fillStyle = i === 0 ? "#4f9a61" : "#3f7d4e";
+      ctx.beginPath();
+      ctx.ellipse(cx + side * (10 + p * 12), ly, size, size * 0.52, side * 0.5, 0, 6.283);
+      ctx.fill();
+    }
+
+    // つぼみ・花
+    if (p > 0.75) {
+      var open = Math.min(1, (p - 0.75) / 0.2);
+      var r = 4 + open * 9;
+      if (open < 0.35) {
+        ctx.fillStyle = "#5c8a4e";
+        ctx.beginPath();
+        ctx.ellipse(topX, topY - 2, r * 0.8, r * 1.1, 0, 0, 6.283);
+        ctx.fill();
+      } else {
+        ctx.fillStyle = "#e07a5f";
+        for (var k = 0; k < 6; k++) {
+          var a = k * Math.PI / 3 + t / 2400;
+          ctx.beginPath();
+          ctx.ellipse(topX + Math.cos(a) * r * 0.75, topY - 2 + Math.sin(a) * r * 0.75, r * 0.62, r * 0.4, a, 0, 6.283);
+          ctx.fill();
+        }
+        ctx.fillStyle = "#ffd166";
+        ctx.beginPath();
+        ctx.arc(topX, topY - 2, r * 0.42, 0, 6.283);
+        ctx.fill();
+      }
+    }
+  }
+
+  function draw(now) {
+    var t = now || 0;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    var cx = W / 2, cy = H / 2;
+    var R = W * 0.42;
+    var p = progress();
+
+    // 背景の円
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, 6.283);
+    ctx.fillStyle = "rgba(255,255,255,.5)";
+    ctx.fill();
+
+    // リング
+    ctx.lineWidth = 8;
+    ctx.lineCap = "round";
+    ctx.strokeStyle = "rgba(63,125,78,.16)";
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, 6.283);
+    ctx.stroke();
+
+    ctx.strokeStyle = p >= 1 ? "#e07a5f" : "#3f7d4e";
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + 6.283 * p);
+    ctx.stroke();
+
+    drawPlant(p, t);
+
+    // 紙吹雪
+    for (var i = confetti.length - 1; i >= 0; i--) {
+      var c = confetti[i];
+      c.vy += 0.15;
+      c.x += c.vx;
+      c.y += c.vy;
+      c.life -= 1;
+      if (c.life <= 0) { confetti.splice(i, 1); continue; }
+      ctx.fillStyle = c.color;
+      ctx.globalAlpha = Math.min(1, c.life / 30);
+      ctx.fillRect(c.x, c.y, 5, 8);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function tick(now) {
+    if (running) {
+      remaining = Math.max(0, (endAt - now) / 1000);
+      timeEl.textContent = fmt(remaining);
+      if (remaining <= 0) complete();
+    }
+    draw(now);
+    requestAnimationFrame(tick);
+  }
+
+  function complete() {
+    running = false;
+    remaining = 0;
+    timeEl.textContent = "0:00";
+    phaseEl.textContent = "BLOOM";
+    startBtn.textContent = "もう一度";
+    startBtn.classList.remove("paused");
+    blooms += 1;
+    try { window.localStorage.setItem("shuchu_blooms", String(blooms)); } catch (e) {}
+    updateCount();
+    statusEl.innerHTML = "<b>おつかれさまでした。</b>花が咲きました。";
+    completeAt = performance.now();
+    for (var i = 0; i < 40; i++) {
+      confetti.push({
+        x: W / 2 + (Math.random() - 0.5) * 60,
+        y: H * 0.35,
+        vx: (Math.random() - 0.5) * 3,
+        vy: -1 - Math.random() * 3,
+        life: 50 + Math.random() * 40,
+        color: ["#e07a5f", "#ffd166", "#4f9a61", "#f2b134"][i % 4]
+      });
+    }
+  }
+
+  function start() {
+    if (running) {
+      running = false;
+      startBtn.textContent = "つづける";
+      startBtn.classList.add("paused");
+      statusEl.textContent = "ひと休み中。";
+      return;
+    }
+    if (remaining <= 0) remaining = total;
+    endAt = performance.now() + remaining * 1000;
+    running = true;
+    startBtn.textContent = "とめる";
+    startBtn.classList.remove("paused");
+    phaseEl.textContent = "FOCUS";
+    statusEl.textContent = "集中しています…";
+  }
+
+  function reset() {
+    running = false;
+    remaining = total;
+    timeEl.textContent = fmt(remaining);
+    startBtn.textContent = "はじめる";
+    startBtn.classList.remove("paused");
+    phaseEl.textContent = "FOCUS";
+    statusEl.textContent = "準備できたら、はじめてください。";
+    confetti = [];
+    draw(performance.now());
+  }
+
+  document.querySelectorAll(".modes button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      total = Number(b.getAttribute("data-sec"));
+      document.querySelectorAll(".modes button").forEach(function (x) {
+        x.setAttribute("aria-pressed", x === b ? "true" : "false");
+      });
+      reset();
+    });
+  });
+
+  startBtn.addEventListener("click", start);
+  document.getElementById("reset").addEventListener("click", reset);
+
+  if (window.ResizeObserver) new ResizeObserver(function () { resize(); draw(performance.now()); }).observe(canvas.parentElement);
+  else window.addEventListener("resize", function () { resize(); draw(performance.now()); });
+
+  resize();
+  updateCount();
+  timeEl.textContent = fmt(remaining);
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>
