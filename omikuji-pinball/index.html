@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>おみくじピンボール — 玉の落ちた先が、今日の運。</title>
+<meta name="description" content="玉を落として、ピンに当たりながら落ちていく先で今日の運勢を決める、物理演算おみくじです。">
+<meta property="og:title" content="おみくじピンボール — 玉の落ちた先が、今日の運。">
+<meta property="og:description" content="玉を落とすだけ。ピンに当たって、どこに落ちるかで今日の運勢が決まります。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/omikuji-pinball/">
+<meta property="og:site_name" content="おみくじピンボール">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#1a1320">
+<style>
+  :root{
+    --bg:#1a1320;
+    --panel:#241a2c;
+    --ink:#f7efe3;
+    --muted:rgba(247,239,227,.6);
+    --gold:#f2c14e;
+    --line:rgba(247,239,227,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #3a2440 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #2a1c33 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:520px;margin:auto;width:100%;padding:20px 16px calc(26px + env(safe-area-inset-bottom))}
+  .kicker{margin:0;font-size:10px;letter-spacing:.3em;color:var(--gold);font-weight:800}
+  h1{margin:.26em 0 .1em;font-size:clamp(1.6rem,6.2vw,2.2rem);letter-spacing:-.02em;line-height:1.1}
+  .lead{margin:0 0 12px;font-size:12.5px;color:var(--muted);line-height:1.65}
+
+  .board{
+    position:relative;
+    border-radius:16px;overflow:hidden;
+    border:1px solid var(--line);
+    background:#140f19;
+    box-shadow:0 18px 44px rgba(0,0,0,.5);
+    height:clamp(360px,56vh,540px);
+    touch-action:none;
+    -webkit-tap-highlight-color:transparent;
+  }
+  #pinball{display:block;width:100%;height:100%}
+
+  .controls{display:flex;gap:8px;margin-top:12px}
+  #drop{
+    flex:1;font:inherit;font-size:16px;font-weight:900;letter-spacing:.06em;
+    color:#1c1408;background:var(--gold);border:2px solid #0c0810;border-radius:12px;
+    padding:14px;min-height:54px;cursor:pointer;
+    box-shadow:4px 4px 0 #0c0810;transition:transform .08s,box-shadow .08s,filter .15s;
+  }
+  #drop:hover{filter:brightness(1.05)}
+  #drop:active{transform:translate(2px,2px);box-shadow:2px 2px 0 #0c0810}
+  #drop:disabled{filter:grayscale(.4) brightness(.85);cursor:default;box-shadow:4px 4px 0 rgba(0,0,0,.4)}
+  #drop:focus-visible{outline:3px solid #fff;outline-offset:3px}
+
+  .result{
+    margin-top:12px;border-radius:14px;padding:16px 18px;
+    background:var(--panel);border:1px solid var(--line);
+    min-height:96px;
+  }
+  .result .label{font-size:10px;letter-spacing:.24em;color:var(--muted);font-weight:800}
+  .result .rank{font-size:clamp(1.8rem,7vw,2.4rem);font-weight:900;letter-spacing:-.02em;line-height:1.1;margin-top:2px}
+  .result .rank.good{color:var(--gold)}
+  .result .rank.bad{color:#c98b8b}
+  .result p{margin:6px 0 0;font-size:12.5px;color:var(--muted);line-height:1.6}
+  .status{margin:10px 0 0;font-size:11px;color:rgba(247,239,227,.4);line-height:1.6}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <p class="kicker">PHYSICS OMIKUJI</p>
+  <h1>おみくじピンボール</h1>
+  <p class="lead">玉を落とすだけ。ピンに当たって、どこに落ちるかで今日の運が決まります。</p>
+
+  <div class="board">
+    <canvas id="pinball" role="img" aria-label="ピンと受け皿のあるおみくじ盤"></canvas>
+  </div>
+
+  <div class="controls">
+    <button type="button" id="drop">玉を落とす</button>
+  </div>
+
+  <div class="result" aria-live="polite">
+    <div class="label">TODAY</div>
+    <div class="rank" id="rank">まだ、落としていません</div>
+    <p id="message">玉を落とすと、今日の運勢が出ます。</p>
+  </div>
+
+  <p class="status">何度でも引けます。結果は毎回かわります。</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var canvas = document.getElementById("pinball");
+  var ctx = canvas.getContext("2d");
+  var dropBtn = document.getElementById("drop");
+  var rankEl = document.getElementById("rank");
+  var msgEl = document.getElementById("message");
+
+  var W = 420, H = 480, dpr = 1;
+  var pegs = [];
+  var bins = [
+    { label: "大吉", msg: "今日は、だいたい何をしても大丈夫。調子に乗りすぎない程度に。", tone: "good" },
+    { label: "中吉", msg: "いい日。小さな楽しみを、ひとつ増やしてください。", tone: "good" },
+    { label: "小吉", msg: "悪くない日。温かい飲み物が、いつもより効きます。", tone: "good" },
+    { label: "吉", msg: "ふつうの日。ふつうが、いちばんありがたいものです。", tone: "good" },
+    { label: "末吉", msg: "あとから良くなります。今日は、焦らないでください。", tone: "good" },
+    { label: "凶", msg: "今日は、無理をしない日。早めに寝るのが吉です。", tone: "bad" },
+    { label: "大凶", msg: "大凶と書いてありますが、これ以上は下がりません。あとは上がるだけ。", tone: "bad" }
+  ];
+
+  var ball = null;
+  var falling = false;
+  var slotTop = 0;
+  var lastLanding = -1;
+  var sparkles = [];
+  var shake = 0;
+
+  function resize() {
+    var rect = canvas.parentElement.getBoundingClientRect();
+    W = Math.max(280, Math.round(rect.width));
+    H = Math.max(300, Math.round(rect.height));
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
+    buildPegs();
+    draw();
+  }
+
+  function buildPegs() {
+    pegs = [];
+    var rows = 6;
+    var top = H * 0.16;
+    var gapY = (H * 0.52) / rows;
+    for (var r = 0; r < rows; r++) {
+      var count = 4 + r;
+      var gapX = W / (count + 1);
+      var y = top + r * gapY;
+      for (var i = 0; i < count; i++) {
+        pegs.push({ x: gapX * (i + 1), y: y, r: Math.max(3.5, W * 0.011) });
+      }
+    }
+    slotTop = H * 0.76;
+  }
+
+  function drop() {
+    if (falling) return;
+    falling = true;
+    dropBtn.disabled = true;
+    lastLanding = -1;
+    rankEl.textContent = "…";
+    rankEl.className = "rank";
+    msgEl.textContent = "落ちています。";
+    ball = {
+      x: W / 2 + (Math.random() - 0.5) * 12,
+      y: H * 0.07,
+      vx: (Math.random() - 0.5) * 60,
+      vy: 20,
+      r: Math.max(6, W * 0.017)
+    };
+  }
+
+  function step(dt) {
+    if (!ball) return;
+    var b = ball;
+    b.vy += 1200 * dt;
+    b.vx *= 0.999;
+    b.x += b.vx * dt;
+    b.y += b.vy * dt;
+
+    // 壁
+    if (b.x < b.r + 4) { b.x = b.r + 4; b.vx = Math.abs(b.vx) * 0.6; }
+    if (b.x > W - b.r - 4) { b.x = W - b.r - 4; b.vx = -Math.abs(b.vx) * 0.6; }
+
+    // ピン
+    for (var i = 0; i < pegs.length; i++) {
+      var p = pegs[i];
+      var dx = b.x - p.x;
+      var dy = b.y - p.y;
+      var min = b.r + p.r;
+      var d2 = dx * dx + dy * dy;
+      if (d2 < min * min && d2 > 0.0001) {
+        var d = Math.sqrt(d2);
+        var nx = dx / d, ny = dy / d;
+        b.x = p.x + nx * min;
+        b.y = p.y + ny * min;
+        var dot = b.vx * nx + b.vy * ny;
+        b.vx = (b.vx - 2 * dot * nx) * 0.62 + (Math.random() - 0.5) * 26;
+        b.vy = (b.vy - 2 * dot * ny) * 0.62;
+        shake = 3;
+      }
+    }
+
+    // 受け皿
+    if (b.y >= slotTop - b.r) {
+      land(b.x);
+    }
+    if (b.y > H + 60) land(b.x);
+  }
+
+  function land(x) {
+    var n = bins.length;
+    var idx = Math.max(0, Math.min(n - 1, Math.floor(x / W * n)));
+    falling = false;
+    dropBtn.disabled = false;
+    ball = null;
+    lastLanding = idx;
+
+    var b = bins[idx];
+    rankEl.textContent = b.label;
+    rankEl.className = "rank " + b.tone;
+    msgEl.textContent = b.msg;
+
+    shake = 8;
+    for (var i = 0; i < 26; i++) {
+      sparkles.push({
+        x: x,
+        y: slotTop,
+        vx: (Math.random() - 0.5) * 220,
+        vy: -Math.random() * 260,
+        life: 0.7 + Math.random() * 0.4
+      });
+    }
+  }
+
+  function draw() {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    var g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, "#241a2c");
+    g.addColorStop(0.6, "#180f1e");
+    g.addColorStop(1, "#120b16");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    // ピン
+    for (var i = 0; i < pegs.length; i++) {
+      var p = pegs[i];
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, 6.283);
+      ctx.fillStyle = "rgba(242,193,78,.85)";
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(p.x - p.r * 0.3, p.y - p.r * 0.35, p.r * 0.35, 0, 6.283);
+      ctx.fillStyle = "rgba(255,245,210,.9)";
+      ctx.fill();
+    }
+
+    // 受け皿
+    var n = bins.length;
+    var bw = W / n;
+    for (var k = 0; k < n; k++) {
+      var x = k * bw;
+      var active = k === lastLanding;
+      ctx.fillStyle = active ? "rgba(242,193,78,.18)" : "rgba(255,255,255,.03)";
+      ctx.fillRect(x + 1, slotTop, bw - 2, H - slotTop);
+      ctx.strokeStyle = active ? "rgba(242,193,78,.75)" : "rgba(247,239,227,.14)";
+      ctx.lineWidth = active ? 2 : 1;
+      ctx.strokeRect(x + 1, slotTop, bw - 2, H - slotTop);
+
+      ctx.fillStyle = active ? "#f2c14e" : "rgba(247,239,227,.62)";
+      ctx.font = "800 " + Math.max(9, Math.min(13, bw * 0.3)) + 'px "Hiragino Sans","Yu Gothic",system-ui,sans-serif';
+      ctx.textAlign = "center";
+      ctx.fillText(bins[k].label, x + bw / 2, slotTop + Math.max(18, (H - slotTop) * 0.45));
+    }
+
+    // 玉
+    if (ball) {
+      var bg = ctx.createRadialGradient(ball.x - ball.r * 0.35, ball.y - ball.r * 0.4, ball.r * 0.15, ball.x, ball.y, ball.r);
+      bg.addColorStop(0, "#fff7dd");
+      bg.addColorStop(0.6, "#f2c14e");
+      bg.addColorStop(1, "#c99a2e");
+      ctx.beginPath();
+      ctx.arc(ball.x, ball.y, ball.r, 0, 6.283);
+      ctx.fillStyle = bg;
+      ctx.fill();
+    }
+
+    // きらめき
+    for (var s = sparkles.length - 1; s >= 0; s--) {
+      var sp = sparkles[s];
+      sp.x += sp.vx * 0.016;
+      sp.y += sp.vy * 0.016;
+      sp.vy += 380 * 0.016;
+      sp.life -= 0.016;
+      if (sp.life <= 0) { sparkles.splice(s, 1); continue; }
+      ctx.fillStyle = "rgba(242,193,78," + Math.min(1, sp.life).toFixed(2) + ")";
+      ctx.fillRect(sp.x, sp.y, 3, 3);
+    }
+
+    if (shake > 0.2) shake *= 0.9;
+  }
+
+  var last = 0;
+  function loop(now) {
+    if (!last) last = now;
+    var dt = Math.min(0.032, (now - last) / 1000);
+    last = now;
+    if (ball) {
+      step(dt * 0.5);
+      step(dt * 0.5);
+    }
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  dropBtn.addEventListener("click", drop);
+
+  if (window.ResizeObserver) new ResizeObserver(function () { resize(); }).observe(canvas.parentElement);
+  else window.addEventListener("resize", resize);
+
+  resize();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
