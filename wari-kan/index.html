@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>割り勘メーカー — 飲み会のあと、3秒で解決。</title>
+<meta name="description" content="合計金額と人数を入れるだけ。1人あたりの金額と端数をその場で計算します。切り上げ・切り捨ても選べます。">
+<meta property="og:title" content="割り勘メーカー — 飲み会のあと、3秒で解決。">
+<meta property="og:description" content="合計と人数を入れるだけ。1人いくら払うか、端数はどうするかまで一発で出ます。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/wari-kan/">
+<meta property="og:site_name" content="割り勘メーカー">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#f7f4ec">
+<style>
+  :root{
+    --paper:#f7f4ec;
+    --ink:#1f1c16;
+    --muted:#7d7466;
+    --accent:#b5342a;
+    --line:rgba(31,28,22,.16);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 500px at 100% -10%, #ffe9d2 0%, transparent 60%),
+      radial-gradient(700px 420px at -10% 110%, #e9f0e7 0%, transparent 55%),
+      var(--paper);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+  }
+  .wrap{max-width:460px;margin:auto;width:100%;padding:20px 16px calc(26px + env(safe-area-inset-bottom))}
+  .kicker{margin:0;font-size:10px;letter-spacing:.3em;color:var(--accent);font-weight:800}
+  h1{margin:.26em 0 .1em;font-size:clamp(1.7rem,6.6vw,2.2rem);letter-spacing:-.02em;line-height:1.1}
+  .lead{margin:0 0 14px;font-size:12.5px;color:var(--muted);line-height:1.65}
+
+  .receipt{
+    position:relative;
+    background:#fffdf7;
+    border:1px solid rgba(31,28,22,.2);
+    border-radius:4px;
+    padding:20px 20px 18px;
+    box-shadow:0 16px 34px rgba(31,28,22,.14);
+    font-variant-numeric:tabular-nums;
+  }
+  .receipt::before{
+    content:"";position:absolute;left:0;right:0;top:-1px;height:8px;
+    background:repeating-linear-gradient(90deg, transparent 0 6px, var(--paper) 6px 12px);
+    -webkit-mask:linear-gradient(#000,#000);
+  }
+  .brand{text-align:center;font-size:10px;letter-spacing:.34em;color:var(--muted);font-weight:800}
+  .rule{border-top:1px dashed rgba(31,28,22,.28);margin:12px 0}
+  .line{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;padding:3px 0}
+  .line span{color:var(--muted)}
+  .line b{font-weight:800;font-size:14px}
+  .per{text-align:center;padding:4px 0 2px}
+  .per .lab{font-size:10px;letter-spacing:.22em;color:var(--muted);font-weight:800}
+  .per .amount{font-size:clamp(2.6rem,13vw,3.6rem);font-weight:900;letter-spacing:-.04em;line-height:1.1}
+  .per .amount small{font-size:.34em;font-weight:800;color:var(--muted);margin-left:4px;letter-spacing:0}
+  .note{text-align:center;font-size:11px;color:var(--muted);min-height:1.4em}
+  .stamp{
+    position:absolute;right:16px;bottom:14px;
+    width:42px;height:42px;border:2.5px solid var(--accent);border-radius:50%;
+    color:var(--accent);display:flex;align-items:center;justify-content:center;
+    font-size:18px;font-weight:800;transform:rotate(-9deg);opacity:.85;
+  }
+
+  .entry{margin-top:14px}
+  #total{
+    width:100%;font:inherit;font-size:1.6rem;font-weight:800;letter-spacing:-.01em;
+    color:var(--ink);background:#fffdf8;border:1.5px solid var(--ink);border-radius:12px;
+    padding:10px 14px;min-height:56px;outline:none;font-variant-numeric:tabular-nums;
+  }
+  #total:focus{box-shadow:0 0 0 3px rgba(181,52,42,.18)}
+
+  .people{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+  .people button{
+    flex:1 1 0;min-width:52px;min-height:46px;
+    font:inherit;font-size:14px;font-weight:800;
+    color:var(--ink);background:#fffdf8;border:1.5px solid var(--line);border-radius:10px;
+    cursor:pointer;transition:background .15s,border-color .15s,color .15s;
+  }
+  .people button:hover{border-color:var(--ink)}
+  .people button[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+  .people button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+  .round{display:flex;gap:6px;margin-top:8px}
+  .round button{
+    flex:1;min-height:42px;font:inherit;font-size:12px;font-weight:800;
+    color:var(--muted);background:transparent;border:1.5px solid var(--line);border-radius:999px;
+    cursor:pointer;
+  }
+  .round button[aria-pressed="true"]{color:var(--ink);border-color:var(--ink);background:#fffdf8}
+  .round button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button,.actions a{
+    flex:1;min-height:46px;display:inline-flex;align-items:center;justify-content:center;
+    font:inherit;font-size:12.5px;font-weight:800;text-decoration:none;
+    color:var(--ink);background:#fffdf8;border:1.5px solid var(--line);border-radius:11px;
+    padding:10px;cursor:pointer;
+  }
+  .actions button:hover,.actions a:hover{border-color:var(--ink)}
+  .status{margin:10px 0 0;font-size:11.5px;color:var(--accent);min-height:1.3em}
+  .note2{margin-top:8px;font-size:10.5px;color:rgba(31,28,22,.45);line-height:1.7}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <p class="kicker">SPLIT THE BILL</p>
+  <h1>割り勘メーカー</h1>
+  <p class="lead">合計と人数を入れるだけ。1人いくらか、端数をどうするかまで、その場で。</p>
+
+  <div class="receipt">
+    <div class="brand">WARI-KAN</div>
+    <div class="rule"></div>
+    <div class="line"><span>合計</span><b id="sumLine">¥0</b></div>
+    <div class="line"><span>人数</span><b id="peopleLine">4人</b></div>
+    <div class="line"><span>端数</span><b id="roundLine">切り上げ</b></div>
+    <div class="rule"></div>
+    <div class="per">
+      <div class="lab">1人あたり</div>
+      <div class="amount"><span id="perAmount">0</span><small>円</small></div>
+    </div>
+    <div class="note" id="note">合計を入れてください。</div>
+    <div class="stamp" aria-hidden="true">割</div>
+  </div>
+
+  <div class="entry">
+    <label for="total" style="position:absolute;left:-9999px">合計金額</label>
+    <input id="total" type="text" inputmode="numeric" value="12800" autocomplete="off" placeholder="合計金額">
+  </div>
+
+  <div class="people" role="group" aria-label="人数">
+    <button type="button" data-n="2">2人</button>
+    <button type="button" data-n="3">3人</button>
+    <button type="button" data-n="4" aria-pressed="true">4人</button>
+    <button type="button" data-n="5">5人</button>
+    <button type="button" data-n="6">6人</button>
+    <button type="button" data-n="8">8人</button>
+  </div>
+
+  <div class="round" role="group" aria-label="端数の扱い">
+    <button type="button" id="up" aria-pressed="true">切り上げ</button>
+    <button type="button" id="down" aria-pressed="false">切り捨て</button>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="copy">結果をコピー</button>
+    <a id="tweet" href="#" target="_blank" rel="noopener">Xでシェア</a>
+  </div>
+
+  <p class="status" id="status" aria-live="polite"></p>
+  <p class="note2">3人以上で割り切れないときは、端数の扱いを選んでください。幹事の気持ちが少し楽になります。</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var URL = "https://rinderdragon0823.github.io/site-factory/wari-kan/";
+  var input = document.getElementById("total");
+  var perAmount = document.getElementById("perAmount");
+  var noteEl = document.getElementById("note");
+  var sumLine = document.getElementById("sumLine");
+  var peopleLine = document.getElementById("peopleLine");
+  var roundLine = document.getElementById("roundLine");
+  var statusEl = document.getElementById("status");
+  var tweet = document.getElementById("tweet");
+
+  var people = 4;
+  var roundUp = true;
+
+  function yen(n) {
+    return "¥" + Math.round(n).toLocaleString("ja-JP");
+  }
+
+  function calc() {
+    var total = Number(String(input.value).replace(/[^\d]/g, "")) || 0;
+    var per, note;
+
+    if (total <= 0) {
+      per = 0;
+      note = "合計を入れてください。";
+    } else if (people <= 1) {
+      per = total;
+      note = "1人なら、払うのはそのまま。";
+    } else {
+      per = roundUp ? Math.ceil(total / people) : Math.floor(total / people);
+      var diff = per * people - total;
+      if (diff === 0) {
+        note = "ぴったり割り切れました。気持ちいい。";
+      } else if (diff > 0) {
+        note = "端数 " + yen(diff) + " は、幹事が多めに払う計算です。";
+      } else {
+        note = "端数 " + yen(-diff) + " が、どこかから消えます。";
+      }
+    }
+
+    perAmount.textContent = per ? per.toLocaleString("ja-JP") : "0";
+    sumLine.textContent = yen(total);
+    peopleLine.textContent = people + "人";
+    roundLine.textContent = roundUp ? "切り上げ" : "切り捨て";
+    noteEl.textContent = note;
+
+    var share = "【割り勘メーカー】" + yen(total) + " を " + people + "人で → 1人 " + yen(per) + "（" + (roundUp ? "切り上げ" : "切り捨て") + "）";
+    tweet.href = "https://twitter.com/intent/tweet?text=" + encodeURIComponent(share) + "&url=" + encodeURIComponent(URL);
+  }
+
+  input.addEventListener("input", function () {
+    var clean = String(input.value).replace(/[^\d]/g, "").slice(0, 9);
+    if (input.value !== clean) input.value = clean;
+    calc();
+  });
+
+  document.querySelectorAll(".people button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      people = Number(b.getAttribute("data-n"));
+      document.querySelectorAll(".people button").forEach(function (x) {
+        x.setAttribute("aria-pressed", x === b ? "true" : "false");
+      });
+      calc();
+    });
+  });
+
+  document.getElementById("up").addEventListener("click", function () {
+    roundUp = true;
+    this.setAttribute("aria-pressed", "true");
+    document.getElementById("down").setAttribute("aria-pressed", "false");
+    calc();
+  });
+
+  document.getElementById("down").addEventListener("click", function () {
+    roundUp = false;
+    this.setAttribute("aria-pressed", "true");
+    document.getElementById("up").setAttribute("aria-pressed", "false");
+    calc();
+  });
+
+  document.getElementById("copy").addEventListener("click", function () {
+    var text = "【割り勘メーカー】\n合計 " + sumLine.textContent + "\n" + people + "人で割ると、1人 " + perAmount.textContent + "円（" + (roundUp ? "切り上げ" : "切り捨て") + "）\n" + URL;
+    copyText(text).then(function (ok) {
+      statusEl.textContent = ok ? "コピーしました。" : "コピーできませんでした。";
+      window.setTimeout(function () { statusEl.textContent = ""; }, 1800);
+    });
+  });
+
+  function copyText(text) {
+    return new Promise(function (resolve) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () { resolve(true); }, function () { resolve(fallbackCopy(text)); });
+      } else {
+        resolve(fallbackCopy(text));
+      }
+    });
+  }
+
+  function fallbackCopy(text) {
+    try {
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.top = "-1000px";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok;
+    } catch (e) { return false; }
+  }
+
+  calc();
+})();
+</script>
+</body>
+</html>
