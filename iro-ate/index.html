@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>いろあて — 文字じゃなくて、色を選ぶ。</title>
+<meta name="description" content="書いてある言葉ではなく、文字の色を当てる10問。脳がちょっと裏切られる、色の反射テストです。">
+<meta property="og:title" content="いろあて — 文字じゃなくて、色を選ぶ。">
+<meta property="og:description" content="「あか」と書いてあっても、色が青なら青を選ぶ。10問の色あてテスト。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/iro-ate/">
+<meta property="og:site_name" content="いろあて">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#fbf7ef">
+<style>
+  :root{
+    --paper:#fbf7ef;
+    --ink:#1e1b17;
+    --muted:#847968;
+    --red:#e63946;
+    --blue:#3d6fb4;
+    --yellow:#e8a52b;
+    --green:#2a9d8f;
+    --line:rgba(30,27,23,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 500px at 100% -10%, #fff0d6 0%, transparent 60%),
+      radial-gradient(700px 420px at -10% 110%, #e9f2ea 0%, transparent 55%),
+      var(--paper);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:520px;margin:auto;width:100%;padding:20px 16px calc(26px + env(safe-area-inset-bottom))}
+  .kicker{margin:0;font-size:10px;letter-spacing:.3em;color:var(--muted);font-weight:800}
+  h1{margin:.26em 0 .1em;font-size:clamp(1.7rem,6.6vw,2.3rem);letter-spacing:-.02em;line-height:1.1}
+  .lead{margin:0 0 12px;font-size:12.5px;color:var(--muted);line-height:1.65}
+
+  .hud{display:flex;justify-content:space-between;align-items:baseline;font-size:11px;color:var(--muted);font-weight:800;letter-spacing:.1em}
+  .hud b{font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{
+    position:relative;margin-top:8px;
+    border-radius:18px;
+    border:2px solid var(--ink);
+    background:#fffdf7;
+    box-shadow:5px 5px 0 var(--ink);
+    padding:26px 18px 22px;
+    min-height:250px;
+    display:flex;flex-direction:column;justify-content:center;
+    text-align:center;
+  }
+  .word{
+    font-size:clamp(3.4rem,17vw,5rem);
+    font-weight:900;letter-spacing:.02em;line-height:1.1;
+    transition:opacity .12s;
+  }
+  .word.flash{opacity:.25}
+  .prompt{margin-top:12px;font-size:11px;letter-spacing:.16em;color:var(--muted);font-weight:800}
+
+  .choices{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:16px}
+  .choices button{
+    aspect-ratio:1/1;border-radius:16px;border:2px solid var(--ink);cursor:pointer;
+    background:var(--c);box-shadow:3px 3px 0 rgba(30,27,23,.35);
+    transition:transform .08s,box-shadow .08s,filter .15s;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .choices button:hover{filter:brightness(1.05)}
+  .choices button:active{transform:translate(2px,2px);box-shadow:1px 1px 0 rgba(30,27,23,.35)}
+  .choices button:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+  .choices button.ok{outline:4px solid #2a9d5c;outline-offset:2px}
+  .choices button.ng{outline:4px solid #b5342a;outline-offset:2px}
+
+  .result{
+    margin-top:14px;border-radius:16px;padding:18px;text-align:center;
+    background:#fffdf7;border:2px solid var(--ink);box-shadow:4px 4px 0 var(--ink);
+  }
+  .result .big{font-size:clamp(2.4rem,11vw,3.2rem);font-weight:900;letter-spacing:-.04em;line-height:1.05}
+  .result .big small{font-size:.36em;font-weight:800;color:var(--muted);margin-left:4px}
+  .result .sub{margin:6px 0 12px;font-size:12px;color:var(--muted)}
+  .result button{
+    width:100%;font:inherit;font-size:15px;font-weight:900;
+    color:#fbf7ef;background:var(--ink);border:0;border-radius:11px;
+    padding:13px;min-height:48px;cursor:pointer;
+  }
+  .status{margin:10px 0 0;font-size:11.5px;color:var(--muted);min-height:1.4em;text-align:center}
+  .note{margin-top:8px;font-size:10.5px;color:rgba(30,27,23,.42);line-height:1.7}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <p class="kicker">STROOP TEST</p>
+  <h1>いろあて</h1>
+  <p class="lead">書いてある言葉ではなく、文字の色を選んでください。10問です。</p>
+
+  <div class="hud"><span>Q <b id="qnum">1</b> / 10</span><span>ミス <b id="miss">0</b></span></div>
+
+  <div class="stage">
+    <div class="word" id="word">あか</div>
+    <div class="prompt">この文字の「色」は？</div>
+  </div>
+
+  <div class="choices" id="choices" role="group" aria-label="色を選ぶ"></div>
+
+  <div class="result" id="result" hidden>
+    <div class="big"><span id="time">0.0</span><small>秒</small></div>
+    <div class="sub" id="sub">ミス 0 ／ おつかれさまでした</div>
+    <button type="button" id="again">もう一回</button>
+  </div>
+
+  <p class="status" id="status" aria-live="polite">色を選ぶと、次の問題に進みます。</p>
+  <p class="note">色の名前と、実際の色がちがうほど、脳は少し迷います。それがふつうです。</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var NAMES = ["あか", "あお", "きいろ", "みどり"];
+  var COLORS = ["#e63946", "#3d6fb4", "#e8a52b", "#2a9d8f"];
+
+  // [表示する言葉, 文字の色]
+  var ROUNDS = [
+    [0, 1], [1, 2], [2, 3], [3, 0], [0, 2],
+    [1, 3], [2, 0], [3, 1], [0, 3], [1, 0]
+  ];
+
+  var wordEl = document.getElementById("word");
+  var qnumEl = document.getElementById("qnum");
+  var missEl = document.getElementById("miss");
+  var choicesEl = document.getElementById("choices");
+  var resultEl = document.getElementById("result");
+  var timeEl = document.getElementById("time");
+  var subEl = document.getElementById("sub");
+  var statusEl = document.getElementById("status");
+
+  var idx = 0;
+  var misses = 0;
+  var startedAt = 0;
+  var locked = false;
+  var finished = false;
+
+  function buildChoices() {
+    NAMES.forEach(function (name, i) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.style.setProperty("--c", COLORS[i]);
+      b.setAttribute("aria-label", name);
+      b.dataset.i = String(i);
+      b.addEventListener("click", function () { answer(i, b); });
+      choicesEl.appendChild(b);
+    });
+  }
+
+  function reset() {
+    idx = 0;
+    misses = 0;
+    locked = false;
+    finished = false;
+    startedAt = 0;
+    missEl.textContent = "0";
+    resultEl.hidden = true;
+    choicesEl.hidden = false;
+    statusEl.textContent = "色を選ぶと、次の問題に進みます。";
+    showRound();
+  }
+
+  function showRound() {
+    var r = ROUNDS[idx];
+    wordEl.textContent = NAMES[r[0]];
+    wordEl.style.color = COLORS[r[1]];
+    qnumEl.textContent = String(idx + 1);
+    wordEl.classList.remove("flash");
+    document.querySelectorAll(".choices button").forEach(function (b) {
+      b.classList.remove("ok", "ng");
+    });
+  }
+
+  function answer(i, btn) {
+    if (locked || finished) return;
+    if (!startedAt) startedAt = performance.now();
+    var ink = ROUNDS[idx][1];
+    var ok = i === ink;
+
+    if (ok) {
+      btn.classList.add("ok");
+    } else {
+      misses += 1;
+      missEl.textContent = String(misses);
+      btn.classList.add("ng");
+      var correct = choicesEl.querySelector('[data-i="' + ink + '"]');
+      if (correct) correct.classList.add("ok");
+    }
+
+    locked = true;
+    statusEl.textContent = ok ? "正解。" : "色は「" + NAMES[ink] + "」でした。";
+
+    window.setTimeout(function () {
+      idx += 1;
+      locked = false;
+      if (idx >= ROUNDS.length) finish();
+      else showRound();
+    }, ok ? 220 : 620);
+  }
+
+  function finish() {
+    finished = true;
+    var secs = (performance.now() - startedAt) / 1000;
+    timeEl.textContent = secs.toFixed(1);
+    var rank = misses === 0 ? "色に強い人" : misses <= 2 ? "ふつうの脳" : "色に弱い人";
+    subEl.textContent = "ミス " + misses + " ／ " + rank;
+    resultEl.hidden = false;
+    choicesEl.hidden = true;
+    statusEl.textContent = "おしまい。もう一回どうぞ。";
+    document.getElementById("again").focus({ preventScroll: true });
+  }
+
+  document.getElementById("again").addEventListener("click", reset);
+
+  buildChoices();
+  reset();
+})();
+</script>
+</body>
+</html>
