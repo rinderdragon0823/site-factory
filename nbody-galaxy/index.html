@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>N体重力 — 粒子が、銀河になる。</title>
+<meta name="description" content="400個の粒子が互いの重力で動く、リアルタイムN体シミュレーション。G・軟化・減衰を動かして、円盤や衝突を眺められます。">
+<meta property="og:title" content="N体重力 — 粒子が、銀河になる。">
+<meta property="og:description" content="全粒子が全粒子を引っぱる。ただそれだけで、渦も衝突も生まれる。リアルタイムN体シミュレーション。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/nbody-galaxy/">
+<meta property="og:site_name" content="N体重力">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05060a">
+<style>
+  :root{
+    --bg:#05060a;
+    --panel:#0d1018;
+    --ink:#e9eef7;
+    --muted:rgba(233,238,247,.56);
+    --accent:#7db8ff;
+    --line:rgba(233,238,247,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 85% -10%, #152036 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #1b1428 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:640px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--accent);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.5rem,5.6vw,2rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.1em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{
+    position:relative;margin-top:10px;
+    border-radius:14px;overflow:hidden;
+    border:1px solid var(--line);
+    background:#04050a;
+    box-shadow:0 16px 40px rgba(0,0,0,.55);
+    touch-action:none;
+  }
+  #sky{display:block;width:100%;aspect-ratio:1/1;cursor:crosshair}
+  .hint{position:absolute;left:10px;bottom:10px;font-size:10px;color:rgba(233,238,247,.45);pointer-events:none}
+
+  .presets{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  .presets button{
+    font:inherit;font-size:11.5px;font-weight:800;
+    color:var(--muted);background:transparent;
+    border:1.5px solid var(--line);border-radius:999px;
+    padding:8px 13px;min-height:38px;cursor:pointer;
+    transition:border-color .15s,color .15s,background .15s;
+  }
+  .presets button:hover{color:var(--ink);border-color:var(--accent)}
+  .presets button[aria-pressed="true"]{background:var(--accent);color:#07101f;border-color:var(--accent)}
+  .presets button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+  .panel{margin-top:10px;padding:10px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:82px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--accent);min-width:0;cursor:pointer}
+  .row output{width:62px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0d1018;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--accent)}
+  .actions button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,238,247,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">N-BODY GRAVITY</p>
+      <h1>N体重力</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="sky" width="600" height="600" role="img" aria-label="N体シミュレーションの粒子"></canvas>
+    <div class="hint">クリックで重い星を置く</div>
+  </div>
+
+  <div class="presets" role="group" aria-label="初期配置">
+    <button type="button" data-p="disk" aria-pressed="true">円盤</button>
+    <button type="button" data-p="collide" aria-pressed="false">衝突</button>
+    <button type="button" data-p="binary" aria-pressed="false">連星</button>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="g">重力 G</label><input id="g" type="range" min="0.10" max="2.50" step="0.05" value="0.80"><output id="gVal">0.80</output></div>
+    <div class="row"><label for="soft">軟化</label><input id="soft" type="range" min="2" max="40" step="1" value="10"><output id="softVal">10</output></div>
+    <div class="row"><label for="damp">減衰</label><input id="damp" type="range" min="0" max="0.010" step="0.001" value="0.001"><output id="dampVal">0.001</output></div>
+    <div class="row"><label for="trail">残像</label><input id="trail" type="range" min="0.02" max="0.35" step="0.01" value="0.12"><output id="trailVal">0.12</output></div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="pause">停止</button>
+    <button type="button" id="reset">リセット</button>
+  </div>
+
+  <p class="note">
+    <b>全粒子が、全粒子を引っぱる</b>（O(N²)）。距離の2乗で弱まり、近づきすぎないように「軟化」を足しています。
+    400個なら毎フレーム約8万回の力の計算。円盤は中心の重い星のまわりを回る速度で初期化しています。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var SIZE = 600;
+  var canvas = document.getElementById("sky");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var gEl = document.getElementById("g");
+  var softEl = document.getElementById("soft");
+  var dampEl = document.getElementById("damp");
+  var trailEl = document.getElementById("trail");
+  var gVal = document.getElementById("gVal");
+  var softVal = document.getElementById("softVal");
+  var dampVal = document.getElementById("dampVal");
+  var trailVal = document.getElementById("trailVal");
+
+  var N = 400;
+  var G = 0.80;
+  var SOFT = 10;
+  var DAMP = 0.001;
+  var FADE = 0.12;
+  var paused = false;
+
+  var x, y, vx, vy, m, ax, ay, hue;
+  var trailCanvas = document.createElement("canvas");
+  trailCanvas.width = SIZE;
+  trailCanvas.height = SIZE;
+  var tctx = trailCanvas.getContext("2d", { alpha: false });
+
+  function alloc(n) {
+    x = new Float32Array(n); y = new Float32Array(n);
+    vx = new Float32Array(n); vy = new Float32Array(n);
+    ax = new Float32Array(n); ay = new Float32Array(n);
+    m = new Float32Array(n); hue = new Float32Array(n);
+    N = n;
+  }
+
+  function clearSky() {
+    tctx.setTransform(1, 0, 0, 1, 0, 0);
+    tctx.fillStyle = "#04050a";
+    tctx.fillRect(0, 0, SIZE, SIZE);
+    ctx.fillStyle = "#04050a";
+    ctx.fillRect(0, 0, SIZE, SIZE);
+  }
+
+  function setParticle(i, px, py, pvx, pvy, mass, h) {
+    x[i] = px; y[i] = py; vx[i] = pvx; vy[i] = pvy;
+    m[i] = mass; hue[i] = h;
+    ax[i] = 0; ay[i] = 0;
+  }
+
+  function build(kind) {
+    alloc(400);
+    clearSky();
+    var cx = SIZE / 2, cy = SIZE / 2;
+
+    if (kind === "collide") {
+      for (var i = 0; i < N; i++) {
+        var left = i < N / 2;
+        var ox = left ? 170 : 430;
+        var oy = 300 + (Math.random() - 0.5) * 40;
+        var ang = Math.random() * 6.283;
+        var rr = Math.pow(Math.random(), 0.6) * 46;
+        var px = ox + Math.cos(ang) * rr;
+        var py = oy + Math.sin(ang) * rr;
+        var speed = 0.9;
+        setParticle(i, px, py, left ? speed : -speed, (Math.random() - 0.5) * 0.08, 1, left ? 200 : 320);
+      }
+      setParticle(0, 170, 300, 0.9, 0, 160, 40);
+      setParticle(1, 430, 300, -0.9, 0, 160, 350);
+      return;
+    }
+
+    if (kind === "binary") {
+      var bx = 300 + 90, by = 300;
+      var bv = 2.1;
+      for (var j = 0; j < N; j++) {
+        var pick = j % 2 === 0 ? 1 : -1;
+        var ccx = 300 + pick * 90;
+        var ccy = 300;
+        var a2 = Math.random() * 6.283;
+        var r2 = 18 + Math.pow(Math.random(), 0.7) * 46;
+        var px2 = ccx + Math.cos(a2) * r2;
+        var py2 = ccy + Math.sin(a2) * r2;
+        var vAng = Math.sqrt(0.9 * 220 / r2);
+        setParticle(j, px2, py2,
+          -Math.sin(a2) * vAng + pick * -bv,
+          Math.cos(a2) * vAng + 0,
+          1, pick > 0 ? 190 : 300);
+      }
+      setParticle(0, 390, 300, 0, 2.1, 260, 40);
+      setParticle(1, 210, 300, 0, -2.1, 260, 320);
+      return;
+    }
+
+    // disk
+    var M0 = 1600;
+    for (var k = 0; k < N; k++) {
+      if (k === 0) {
+        setParticle(0, cx, cy, 0, 0, M0, 45);
+        continue;
+      }
+      var ang3 = Math.random() * 6.283;
+      var r3 = 42 + Math.pow(Math.random(), 0.65) * 215;
+      var px3 = cx + Math.cos(ang3) * r3;
+      var py3 = cy + Math.sin(ang3) * r3;
+      var v = Math.sqrt(G * M0 / r3) * (0.92 + Math.random() * 0.12);
+      setParticle(k, px3, py3,
+        -Math.sin(ang3) * v + (Math.random() - 0.5) * 0.12,
+        Math.cos(ang3) * v + (Math.random() - 0.5) * 0.12,
+        1 + Math.random() * 0.6,
+        170 + (1 - r3 / 260) * 130);
+    }
+  }
+
+  function physics() {
+    var n = N;
+    var s2 = SOFT * SOFT;
+    var i, j;
+    for (i = 0; i < n; i++) { ax[i] = 0; ay[i] = 0; }
+
+    for (i = 0; i < n; i++) {
+      var xi = x[i], yi = y[i], mi = m[i];
+      for (j = i + 1; j < n; j++) {
+        var dx = x[j] - xi;
+        var dy = y[j] - yi;
+        var d2 = dx * dx + dy * dy + s2;
+        var inv = 1 / (d2 * Math.sqrt(d2));
+        var f = G * inv;
+        ax[i] += dx * f * m[j];
+        ay[i] += dy * f * m[j];
+        ax[j] -= dx * f * mi;
+        ay[j] -= dy * f * mi;
+      }
+    }
+
+    var damp = 1 - DAMP;
+    for (i = 0; i < n; i++) {
+      vx[i] = (vx[i] + ax[i]) * damp;
+      vy[i] = (vy[i] + ay[i]) * damp;
+      x[i] += vx[i];
+      y[i] += vy[i];
+    }
+  }
+
+  function draw() {
+    // 残像
+    tctx.globalCompositeOperation = "source-over";
+    tctx.fillStyle = "rgba(4,5,10," + FADE.toFixed(2) + ")";
+    tctx.fillRect(0, 0, SIZE, SIZE);
+
+    tctx.globalCompositeOperation = "lighter";
+    for (var i = 0; i < N; i++) {
+      var sp = Math.sqrt(vx[i] * vx[i] + vy[i] * vy[i]);
+      var h = hue[i];
+      var light = Math.min(82, 45 + sp * 6);
+      var rad = m[i] > 50 ? 3.2 : 1.25;
+      tctx.fillStyle = "hsla(" + h.toFixed(0) + ",92%," + light.toFixed(0) + "%,0.9)";
+      tctx.beginPath();
+      tctx.arc(x[i], y[i], rad, 0, 6.283);
+      tctx.fill();
+    }
+    tctx.globalCompositeOperation = "source-over";
+
+    ctx.drawImage(trailCanvas, 0, 0);
+  }
+
+  var last = 0, frames = 0, fpsTimer = 0, smooth = 0;
+  function loop(now) {
+    if (!last) { last = now; fpsTimer = now; }
+    var frame = now - last;
+    last = now;
+
+    if (!paused) {
+      var t0 = performance.now();
+      physics();
+      smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+      draw();
+    }
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      msEl.textContent = smooth.toFixed(1) + " ms / " + N + "体";
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  function pos(e) {
+    var rect = canvas.getBoundingClientRect();
+    return {
+      x: (e.clientX - rect.left) / rect.width * SIZE,
+      y: (e.clientY - rect.top) / rect.height * SIZE
+    };
+  }
+
+  function addMass(e) {
+    var p = pos(e);
+    // 末尾の1体を重い星として置き直す
+    var i = N - 1;
+    setParticle(i, p.x, p.y, 0, 0, 220, 45 + Math.random() * 40);
+  }
+
+  canvas.addEventListener("pointerdown", function (e) {
+    e.preventDefault();
+    addMass(e);
+    if (paused) draw();
+  });
+
+  gEl.addEventListener("input", function () { G = Number(gEl.value); gVal.textContent = G.toFixed(2); });
+  softEl.addEventListener("input", function () { SOFT = Number(softEl.value); softVal.textContent = String(SOFT); });
+  dampEl.addEventListener("input", function () { DAMP = Number(dampEl.value); dampVal.textContent = DAMP.toFixed(3); });
+  trailEl.addEventListener("input", function () { FADE = Number(trailEl.value); trailVal.textContent = FADE.toFixed(2); });
+
+  document.querySelectorAll(".presets button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var kind = b.getAttribute("data-p");
+      document.querySelectorAll(".presets button").forEach(function (x2) {
+        x2.setAttribute("aria-pressed", x2 === b ? "true" : "false");
+      });
+      build(kind);
+    });
+  });
+
+  document.getElementById("pause").addEventListener("click", function () {
+    paused = !paused;
+    this.textContent = paused ? "再開" : "停止";
+  });
+
+  document.getElementById("reset").addEventListener("click", function () {
+    build("disk");
+    document.querySelectorAll(".presets button").forEach(function (x3) {
+      x3.setAttribute("aria-pressed", x3.getAttribute("data-p") === "disk" ? "true" : "false");
+    });
+  });
+
+  document.addEventListener("keydown", function (e) {
+    var tag = (e.target && e.target.tagName) || "";
+    if (tag === "INPUT" || tag === "BUTTON") return;
+    if (e.code === "Space") {
+      e.preventDefault();
+      paused = !paused;
+      document.getElementById("pause").textContent = paused ? "再開" : "停止";
+    }
+  });
+
+  build("disk");
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
