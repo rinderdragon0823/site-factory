@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>スクラッチ — 削って、当てる。</title>
+<meta name="description" content="銀色の面をこすって削ると、下から今日の運が出てくるスクラッチカード。何枚でも引けます。">
+<meta property="og:title" content="スクラッチ — 削って、当てる。">
+<meta property="og:description" content="こすって削るだけ。大当たりが出るまで、もう一枚。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/scratch/">
+<meta property="og:site_name" content="スクラッチ">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#141018">
+<style>
+  :root{
+    --bg:#141018;
+    --ink:#f6efe4;
+    --muted:rgba(246,239,228,.6);
+    --gold:#f2c14e;
+    --line:rgba(246,239,228,.15);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #2c2036 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #1d2430 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:520px;margin:auto;width:100%;padding:20px 16px calc(26px + env(safe-area-inset-bottom))}
+  .kicker{margin:0;font-size:10px;letter-spacing:.3em;color:var(--gold);font-weight:800}
+  h1{margin:.26em 0 .1em;font-size:clamp(1.7rem,6.6vw,2.3rem);letter-spacing:-.02em;line-height:1.1}
+  .lead{margin:0 0 14px;font-size:12.5px;color:var(--muted);line-height:1.65}
+
+  .card{
+    position:relative;width:100%;aspect-ratio:3/2;
+    border-radius:18px;overflow:hidden;
+    background:linear-gradient(160deg,#233046,#18202e);
+    border:1px solid var(--line);
+    box-shadow:0 18px 44px rgba(0,0,0,.5);
+    touch-action:none;
+    -webkit-user-select:none;user-select:none;
+  }
+  .prize{
+    position:absolute;inset:0;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;padding:20px;gap:8px;
+  }
+  .prize .tiny{font-size:9.5px;letter-spacing:.34em;color:rgba(246,239,228,.35);font-weight:800}
+  .prize .rank{font-size:clamp(1.9rem,9vw,2.8rem);font-weight:900;letter-spacing:-.03em;line-height:1}
+  .prize .rank.big{color:var(--gold)}
+  .prize .rank.mid{color:#7ad3a5}
+  .prize .rank.small{color:#9fc0e8}
+  .prize .rank.none{color:#a093a8}
+  .prize .msg{font-size:12.5px;color:var(--muted);line-height:1.7;max-width:300px}
+  #scratch{
+    position:absolute;inset:0;width:100%;height:100%;
+    cursor:crosshair;
+    transition:opacity .5s ease;
+  }
+  #scratch.gone{opacity:0;pointer-events:none}
+
+  .controls{display:flex;gap:8px;margin-top:12px}
+  #all{
+    flex:1;font:inherit;font-size:15px;font-weight:900;letter-spacing:.05em;
+    color:#1b1508;background:var(--gold);border:2px solid #0b0810;border-radius:12px;
+    padding:14px;min-height:52px;cursor:pointer;
+    box-shadow:4px 4px 0 #0b0810;transition:transform .08s,box-shadow .08s,filter .15s;
+  }
+  #all:active{transform:translate(2px,2px);box-shadow:2px 2px 0 #0b0810}
+  #all:focus-visible{outline:3px solid #fff;outline-offset:3px}
+  #again{
+    flex:0 0 118px;font:inherit;font-size:12.5px;font-weight:800;
+    color:var(--ink);background:transparent;border:1.5px solid var(--line);border-radius:12px;
+    padding:12px;min-height:52px;cursor:pointer;
+  }
+  #again:hover{border-color:var(--ink)}
+  #again:focus-visible{outline:3px solid var(--gold);outline-offset:3px}
+
+  .status{margin:10px 0 0;font-size:11.5px;color:var(--muted);min-height:1.4em}
+  .note{margin-top:8px;font-size:10.5px;color:rgba(246,239,228,.4);line-height:1.7}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <p class="kicker">SCRATCH CARD</p>
+  <h1>スクラッチ</h1>
+  <p class="lead">銀色の面をこすって削ると、下から今日の運が出てきます。</p>
+
+  <div class="card" id="card">
+    <div class="prize">
+      <div class="tiny">SCRATCH CARD</div>
+      <div class="rank" id="rank">？</div>
+      <div class="msg" id="msg">削ってみてください。</div>
+    </div>
+    <canvas id="scratch" role="img" aria-label="削れる銀色のスクラッチ面"></canvas>
+  </div>
+
+  <div class="controls">
+    <button type="button" id="all">ぜんぶ削る</button>
+    <button type="button" id="again">もう一枚</button>
+  </div>
+
+  <p class="status" id="status" aria-live="polite">指でこすると削れます。</p>
+  <p class="note">当たりが出るまで、何枚でも。出た結果は、そのまま誰かに見せてください。</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var canvas = document.getElementById("scratch");
+  var ctx = canvas.getContext("2d");
+  var card = document.getElementById("card");
+  var rankEl = document.getElementById("rank");
+  var msgEl = document.getElementById("msg");
+  var statusEl = document.getElementById("status");
+  var allBtn = document.getElementById("all");
+  var againBtn = document.getElementById("again");
+
+  var PRIZES = [
+    { rank: "大当たり", cls: "big", msg: "今日、いいことがあります。たぶん、けっこう大きいやつ。", weight: 1 },
+    { rank: "中当たり", cls: "mid", msg: "今日、ちょっといいことがあります。気づけるといいですね。", weight: 3 },
+    { rank: "小当たり", cls: "small", msg: "小さいけれど、確実にいいことがひとつ。", weight: 6 },
+    { rank: "はずれ", cls: "none", msg: "はずれ。でも、削るのは楽しかったでしょう。", weight: 10 }
+  ];
+
+  var W = 400, H = 266, dpr = 1;
+  var revealed = false;
+  var drawing = false;
+  var lastX = -1, lastY = -1;
+  var wipeTimer = 0;
+
+  function pick() {
+    var total = 0;
+    PRIZES.forEach(function (p) { total += p.weight; });
+    var r = Math.random() * total;
+    for (var i = 0; i < PRIZES.length; i++) {
+      r -= PRIZES[i].weight;
+      if (r <= 0) return PRIZES[i];
+    }
+    return PRIZES[PRIZES.length - 1];
+  }
+
+  function size() {
+    var rect = card.getBoundingClientRect();
+    W = Math.round(rect.width);
+    H = Math.round(rect.height);
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
+  }
+
+  function foil() {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalCompositeOperation = "source-over";
+    ctx.clearRect(0, 0, W, H);
+
+    var g = ctx.createLinearGradient(0, 0, W, H);
+    g.addColorStop(0, "#cfd4da");
+    g.addColorStop(0.35, "#9aa3ae");
+    g.addColorStop(0.55, "#e4e8ec");
+    g.addColorStop(0.75, "#8f98a3");
+    g.addColorStop(1, "#c6ccd3");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    // きらめき
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle = "#ffffff";
+    for (var i = 0; i < 90; i++) {
+      var x = (i * 73.7) % W;
+      var y = (i * 41.3) % H;
+      ctx.fillRect(x, y, 1.5, 1.5);
+    }
+    ctx.globalAlpha = 1;
+
+    ctx.fillStyle = "rgba(40,48,58,.45)";
+    ctx.font = '900 ' + Math.round(W * 0.07) + 'px "Hiragino Sans","Yu Gothic",system-ui,sans-serif';
+    ctx.textAlign = "center";
+    ctx.fillText("SCRATCH", W / 2, H / 2 + W * 0.02);
+    ctx.font = '700 ' + Math.round(W * 0.032) + 'px "Hiragino Sans","Yu Gothic",system-ui,sans-serif';
+    ctx.fillStyle = "rgba(40,48,58,.3)";
+    ctx.fillText("こすって削る", W / 2, H / 2 + W * 0.09);
+  }
+
+  function newCard() {
+    window.clearInterval(wipeTimer);
+    revealed = false;
+    drawing = false;
+    lastX = -1;
+    lastY = -1;
+    var p = pick();
+    rankEl.textContent = p.rank;
+    rankEl.className = "rank " + p.cls;
+    msgEl.textContent = p.msg;
+    canvas.classList.remove("gone");
+    size();
+    foil();
+    statusEl.textContent = "指でこすると削れます。";
+    allBtn.disabled = false;
+    allBtn.textContent = "ぜんぶ削る";
+  }
+
+  function erase(x, y) {
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.beginPath();
+    ctx.arc(x, y, Math.max(16, W * 0.05), 0, 6.283);
+    ctx.fill();
+  }
+
+  function pos(e) {
+    var rect = canvas.getBoundingClientRect();
+    return {
+      x: (e.clientX - rect.left) / rect.width * W,
+      y: (e.clientY - rect.top) / rect.height * H
+    };
+  }
+
+  function checkCleared() {
+    if (revealed) return;
+    var step = Math.max(8, Math.round(W / 40));
+    var data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    var clear = 0;
+    var total = 0;
+    var sx = Math.max(1, Math.round(dpr));
+    for (var y = 0; y < canvas.height; y += step * sx) {
+      for (var x = 0; x < canvas.width; x += step * sx) {
+        var i = (y * canvas.width + x) * 4 + 3;
+        if (data[i] < 24) clear++;
+        total++;
+      }
+    }
+    if (clear / total > 0.55) reveal();
+  }
+
+  function reveal() {
+    if (revealed) return;
+    revealed = true;
+    canvas.classList.add("gone");
+    allBtn.disabled = true;
+    allBtn.textContent = "ぜんぶ削る";
+    statusEl.textContent = "出ました。もう一枚どうぞ。";
+    var p = rankEl.textContent;
+    if (revealed && p === "大当たり") statusEl.textContent = "大当たり。今日は、いい日です。";
+  }
+
+  function wipeAll() {
+    if (revealed) return;
+    allBtn.disabled = true;
+    allBtn.textContent = "削っています…";
+    var step = 0;
+    wipeTimer = window.setInterval(function () {
+      step += 1;
+      for (var i = 0; i < 4; i++) {
+        erase(Math.random() * W, Math.random() * H);
+      }
+      if (step > 26) {
+        window.clearInterval(wipeTimer);
+        reveal();
+      }
+    }, 26);
+  }
+
+  canvas.addEventListener("pointerdown", function (e) {
+    e.preventDefault();
+    if (revealed) return;
+    drawing = true;
+    if (canvas.setPointerCapture) {
+      try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+    }
+    var p = pos(e);
+    lastX = p.x;
+    lastY = p.y;
+    erase(p.x, p.y);
+  });
+
+  canvas.addEventListener("pointermove", function (e) {
+    if (!drawing || revealed) return;
+    e.preventDefault();
+    var p = pos(e);
+    var dx = p.x - lastX;
+    var dy = p.y - lastY;
+    var dist = Math.sqrt(dx * dx + dy * dy);
+    var steps = Math.max(1, Math.floor(dist / 8));
+    for (var i = 1; i <= steps; i++) {
+      erase(lastX + dx * i / steps, lastY + dy * i / steps);
+    }
+    lastX = p.x;
+    lastY = p.y;
+  });
+
+  function end() {
+    if (!drawing) return;
+    drawing = false;
+    checkCleared();
+  }
+  canvas.addEventListener("pointerup", end);
+  canvas.addEventListener("pointercancel", end);
+  canvas.addEventListener("pointerleave", end);
+
+  allBtn.addEventListener("click", wipeAll);
+  againBtn.addEventListener("click", newCard);
+
+  if (window.ResizeObserver) {
+    new ResizeObserver(function () {
+      if (!revealed) {
+        size();
+        foil();
+      }
+    }).observe(card);
+  }
+
+  newCard();
+})();
+</script>
+</body>
+</html>
