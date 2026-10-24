@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>まちがい一文字 — ちがう字を、ひとつだけ。</title>
+<meta name="description" content="同じ文字が並ぶ中から、1つだけちがう文字を探す10問。だんだん増えて、だんだん難しくなります。">
+<meta property="og:title" content="まちがい一文字 — ちがう字を、ひとつだけ。">
+<meta property="og:description" content="同じ文字の中に、1つだけちがう字がまぎれています。10問、何秒で見つけられますか。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/machigai-ichimonji/">
+<meta property="og:site_name" content="まちがい一文字">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#f2efe6">
+<style>
+  :root{
+    --paper:#f2efe6;
+    --ink:#1f2330;
+    --muted:#7c7f8a;
+    --accent:#c8452b;
+    --line:rgba(31,35,48,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 500px at 100% -10%, #fff2d8 0%, transparent 60%),
+      radial-gradient(700px 420px at -10% 110%, #e6eee8 0%, transparent 55%),
+      var(--paper);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:520px;margin:auto;width:100%;padding:20px 16px calc(26px + env(safe-area-inset-bottom))}
+  .kicker{margin:0;font-size:10px;letter-spacing:.3em;color:var(--accent);font-weight:800}
+  h1{margin:.26em 0 .1em;font-size:clamp(1.6rem,6.2vw,2.2rem);letter-spacing:-.02em;line-height:1.1}
+  .lead{margin:0 0 12px;font-size:12.5px;color:var(--muted);line-height:1.65}
+
+  .hud{display:flex;justify-content:space-between;align-items:baseline;font-size:11px;color:var(--muted);font-weight:800;letter-spacing:.08em}
+  .hud b{font-size:16px;color:var(--ink);font-variant-numeric:tabular-nums;letter-spacing:0}
+
+  .board{
+    margin-top:8px;
+    background:#fffdf7;
+    border:2px solid var(--ink);
+    border-radius:16px;
+    box-shadow:5px 5px 0 var(--ink);
+    padding:10px;
+    display:grid;
+    gap:3px;
+  }
+  .board.shake{animation:shake .28s}
+  @keyframes shake{
+    0%,100%{transform:translateX(0)}
+    25%{transform:translateX(-5px)}
+    75%{transform:translateX(5px)}
+  }
+  .board button{
+    aspect-ratio:1/1;min-height:0;
+    display:flex;align-items:center;justify-content:center;
+    font-family:"Yu Mincho","YuMincho","Hiragino Mincho ProN",serif;
+    font-size:inherit;
+    font-weight:700;line-height:1;
+    color:var(--ink);background:transparent;border:0;border-radius:6px;
+    cursor:pointer;padding:0;
+    transition:background .12s,transform .08s;
+  }
+  .board button:hover{background:rgba(31,35,48,.06)}
+  .board button:active{transform:scale(.94)}
+  .board button:focus-visible{outline:3px solid var(--accent);outline-offset:1px}
+  .board button.hit{background:rgba(42,157,92,.18);box-shadow:0 0 0 2px #2a9d5c inset}
+  .board button.miss{background:rgba(200,69,43,.16)}
+
+  .result{
+    margin-top:12px;border-radius:16px;padding:18px;text-align:center;
+    background:#fffdf7;border:2px solid var(--ink);box-shadow:4px 4px 0 var(--ink);
+  }
+  .result .big{font-size:clamp(2.2rem,10vw,3rem);font-weight:900;letter-spacing:-.04em;line-height:1.05}
+  .result .big small{font-size:.36em;font-weight:800;color:var(--muted);margin-left:4px}
+  .result .sub{margin:6px 0 12px;font-size:12px;color:var(--muted)}
+  .result button{
+    width:100%;font:inherit;font-size:15px;font-weight:900;
+    color:#fffdf7;background:var(--accent);border:2px solid var(--ink);border-radius:11px;
+    padding:13px;min-height:48px;cursor:pointer;box-shadow:3px 3px 0 var(--ink);
+  }
+  .result button:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+  .status{margin:10px 0 0;font-size:11.5px;color:var(--muted);min-height:1.4em;text-align:center}
+  .note{margin-top:8px;font-size:10.5px;color:rgba(31,35,48,.42);line-height:1.7}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <p class="kicker">ODD ONE OUT</p>
+  <h1>まちがい一文字</h1>
+  <p class="lead">同じ文字が並んでいます。1つだけ、ちがう文字がまぎれています。</p>
+
+  <div class="hud"><span>LEVEL <b id="lvl">1</b> / 10</span><span>ミス <b id="miss">0</b></span><span>TIME <b id="time">0.0</b></span></div>
+
+  <div class="board" id="board" role="group" aria-label="文字のマス"></div>
+
+  <div class="result" id="result" hidden>
+    <div class="big"><span id="finalTime">0.0</span><small>秒</small></div>
+    <p class="sub" id="sub">ミス 0 ／ おつかれさまでした</p>
+    <button type="button" id="again">もう一回</button>
+  </div>
+
+  <p class="status" id="status" aria-live="polite">ちがう文字をタップしてください。</p>
+  <p class="note">レベルが上がるほど、マスが増えて、文字が似てきます。ミスすると、その分だけ時間が増えます。</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var LEVELS = [
+    { c: 4, r: 4, odd: 5, a: "ロ", b: "口" },
+    { c: 4, r: 4, odd: 10, a: "へ", b: "ヘ" },
+    { c: 5, r: 5, odd: 12, a: "ソ", b: "ン" },
+    { c: 5, r: 5, odd: 7, a: "シ", b: "ツ" },
+    { c: 6, r: 6, odd: 20, a: "ク", b: "ケ" },
+    { c: 6, r: 6, odd: 33, a: "ぬ", b: "め" },
+    { c: 7, r: 7, odd: 14, a: "わ", b: "ね" },
+    { c: 7, r: 7, odd: 45, a: "0", b: "O" },
+    { c: 8, r: 8, odd: 26, a: "1", b: "l" },
+    { c: 8, r: 8, odd: 61, a: "ー", b: "一" }
+  ];
+
+  var board = document.getElementById("board");
+  var lvlEl = document.getElementById("lvl");
+  var missEl = document.getElementById("miss");
+  var timeEl = document.getElementById("time");
+  var resultEl = document.getElementById("result");
+  var finalTime = document.getElementById("finalTime");
+  var subEl = document.getElementById("sub");
+  var statusEl = document.getElementById("status");
+
+  var level = 0;
+  var misses = 0;
+  var startedAt = 0;
+  var running = false;
+  var done = false;
+  var raf = 0;
+
+  function pad(n) {
+    return (n < 10 ? "0" : "") + n;
+  }
+
+  function build() {
+    var L = LEVELS[level];
+    var total = L.c * L.r;
+    board.textContent = "";
+    board.style.gridTemplateColumns = "repeat(" + L.c + ", 1fr)";
+    var cell = (board.clientWidth || 420) / L.c;
+    board.style.fontSize = Math.max(11, Math.round(cell * 0.56)) + "px";
+
+    for (var i = 0; i < total; i++) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.textContent = i === L.odd ? L.b : L.a;
+      b.setAttribute("aria-label", "マス" + pad(i + 1));
+      b.dataset.i = String(i);
+      b.addEventListener("click", onPick);
+      board.appendChild(b);
+    }
+
+    lvlEl.textContent = String(level + 1);
+    statusEl.textContent = "ちがう文字をタップしてください。";
+  }
+
+  function onPick(e) {
+    if (done) return;
+    var btn = e.currentTarget;
+    var i = Number(btn.dataset.i);
+    var L = LEVELS[level];
+
+    if (!running) {
+      running = true;
+      startedAt = performance.now();
+      tick();
+    }
+
+    if (i === L.odd) {
+      btn.classList.add("hit");
+      done = true;
+      window.setTimeout(function () {
+        done = false;
+        level += 1;
+        if (level >= LEVELS.length) finish();
+        else {
+          build();
+          board.classList.remove("shake");
+        }
+      }, 260);
+    } else {
+      misses += 1;
+      missEl.textContent = String(misses);
+      btn.classList.add("miss");
+      window.setTimeout(function () { btn.classList.remove("miss"); }, 380);
+      board.classList.remove("shake");
+      void board.offsetWidth;
+      board.classList.add("shake");
+      statusEl.textContent = "ちがいます。もう一度。";
+    }
+  }
+
+  function tick() {
+    if (!running) return;
+    timeEl.textContent = ((performance.now() - startedAt) / 1000 + misses).toFixed(1);
+    raf = requestAnimationFrame(tick);
+  }
+
+  function finish() {
+    running = false;
+    cancelAnimationFrame(raf);
+    var secs = (performance.now() - startedAt) / 1000 + misses;
+    finalTime.textContent = secs.toFixed(1);
+    timeEl.textContent = secs.toFixed(1);
+    var rank = misses === 0 ? "一文字の達人" : misses <= 3 ? "目がいい人" : "ゆっくりで大丈夫";
+    subEl.textContent = "ミス " + misses + "（+ " + misses + "秒）／ " + rank;
+    resultEl.hidden = false;
+    board.hidden = true;
+    statusEl.textContent = "おしまい。おつかれさまでした。";
+    document.getElementById("again").focus({ preventScroll: true });
+  }
+
+  function reset() {
+    level = 0;
+    misses = 0;
+    running = false;
+    done = false;
+    startedAt = 0;
+    cancelAnimationFrame(raf);
+    missEl.textContent = "0";
+    timeEl.textContent = "0.0";
+    resultEl.hidden = true;
+    board.hidden = false;
+    build();
+  }
+
+  document.getElementById("again").addEventListener("click", reset);
+
+  reset();
+})();
+</script>
+</body>
+</html>
