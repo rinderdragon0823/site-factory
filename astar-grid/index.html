@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>A* 迷路 — 探索の途中を、見る。</title>
+<meta name="description" content="A* 経路探索を1フレームずつ可視化。オープン・クローズド・確定経路を色で見ながら、ヒューリスティックの効き方を試せます。">
+<meta property="og:title" content="A* 迷路 — 探索の途中を、見る。">
+<meta property="og:description" content="壁を描いて、探索が広がる様子を眺める。A* の中身がそのまま見える技術デモ。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/astar-grid/">
+<meta property="og:site_name" content="A* 迷路">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#070b12">
+<style>
+  :root{
+    --bg:#070b12;
+    --panel:#0d1420;
+    --ink:#e8f1f8;
+    --muted:rgba(232,241,248,.56);
+    --teal:#2dd4bf;
+    --amber:#fbbf24;
+    --line:rgba(232,241,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #102a33 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #1a1430 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:760px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--teal);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.4rem,5.2vw,1.9rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{
+    margin-top:10px;position:relative;
+    border-radius:14px;overflow:hidden;
+    border:1px solid var(--line);
+    background:#05080e;
+    box-shadow:0 16px 40px rgba(0,0,0,.55);
+    touch-action:none;
+  }
+  #grid{display:block;width:100%;height:auto;cursor:crosshair}
+  .hint{position:absolute;left:10px;bottom:8px;font-size:10px;color:rgba(232,241,248,.45);pointer-events:none}
+
+  .legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:10px;color:var(--muted)}
+  .legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+
+  .panel{margin-top:10px;padding:10px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:96px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--teal);min-width:0;cursor:pointer}
+  .row output{width:62px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+  .actions button{
+    flex:1 1 30%;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0d1420;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--teal)}
+  .actions button[aria-pressed="true"]{background:var(--teal);color:#04211d;border-color:var(--teal)}
+  .actions button:focus-visible{outline:3px solid var(--teal);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(232,241,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">A* PATHFINDING</p>
+      <h1>A* 迷路</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.00 ms</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="grid" width="960" height="680" role="img" aria-label="Aスター探索のグリッド"></canvas>
+    <div class="hint">クリック／ドラッグで壁を描く（もう一度で消す）</div>
+  </div>
+
+  <div class="legend">
+    <span><i style="background:#22303f"></i>壁</span>
+    <span><i style="background:#fbbf24"></i>オープン</span>
+    <span><i style="background:#2dd4bf"></i>クローズド</span>
+    <span><i style="background:#ffffff"></i>経路</span>
+    <span><i style="background:#4ade80"></i>スタート</span>
+    <span><i style="background:#f472b6"></i>ゴール</span>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="speed">展開/フレーム</label><input id="speed" type="range" min="1" max="80" step="1" value="4"><output id="speedVal">4</output></div>
+    <div class="row"><label for="weight">ヒューリスティック</label><input id="weight" type="range" min="0" max="3" step="0.1" value="1"><output id="weightVal">1.0</output></div>
+    <div class="row"><label for="density">壁の密度</label><input id="density" type="range" min="0.05" max="0.40" step="0.01" value="0.24"><output id="densityVal">0.24</output></div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="maze">迷路をつくる</button>
+    <button type="button" id="diag" aria-pressed="true">斜め移動</button>
+    <button type="button" id="clear">壁を消す</button>
+  </div>
+
+  <p class="note">
+    <b>f = g + w·h</b>。g はスタートからの実コスト、h はゴールまでの推定距離（斜めありはオクタイル距離）。
+    w を上げるとゴールに一直線に進み、下げると全方向に広がります。1フレームに何ノード展開するかを動かすと、探索の途中が見えます。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var COLS = 48, ROWS = 34, CELL = 20;
+  var canvas = document.getElementById("grid");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var speedEl = document.getElementById("speed");
+  var weightEl = document.getElementById("weight");
+  var densityEl = document.getElementById("density");
+  var speedVal = document.getElementById("speedVal");
+  var weightVal = document.getElementById("weightVal");
+  var densityVal = document.getElementById("densityVal");
+
+  var walls = new Uint8Array(COLS * ROWS);
+  var g = new Float32Array(COLS * ROWS);
+  var f = new Float32Array(COLS * ROWS);
+  var from = new Int32Array(COLS * ROWS);
+  var closed = new Uint8Array(COLS * ROWS);
+  var open = [];
+  var path = [];
+  var start = idx(3, Math.round(ROWS * 0.26));
+  var goal = idx(COLS - 4, Math.round(ROWS * 0.74));
+  var running = false;
+  var done = false;
+  var found = false;
+  var visited = 0;
+  var expansions = 4;
+  var weight = 1;
+  var diagonal = true;
+  var density = 0.24;
+  var solveMs = 0;
+
+  function idx(c, r) { return r * COLS + c; }
+  function colOf(i) { return i % COLS; }
+  function rowOf(i) { return (i / COLS) | 0; }
+
+  function resetSearch() {
+    g.fill(Infinity);
+    f.fill(Infinity);
+    from.fill(-1);
+    closed.fill(0);
+    open = [];
+    path = [];
+    visited = 0;
+    done = false;
+    found = false;
+    running = true;
+    g[start] = 0;
+    f[start] = h(start) * weight;
+    open.push(start);
+  }
+
+  function h(i) {
+    var dx = Math.abs(colOf(i) - colOf(goal));
+    var dy = Math.abs(rowOf(i) - rowOf(goal));
+    if (diagonal) {
+      var mn = Math.min(dx, dy);
+      return (dx + dy) + (Math.SQRT2 - 2) * mn;
+    }
+    return dx + dy;
+  }
+
+  function neighbors(i, out) {
+    out.length = 0;
+    var c = colOf(i), r = rowOf(i);
+    var dirs = diagonal
+      ? [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, Math.SQRT2], [1, -1, Math.SQRT2], [-1, 1, Math.SQRT2], [-1, -1, Math.SQRT2]]
+      : [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1]];
+    for (var k = 0; k < dirs.length; k++) {
+      var nc = c + dirs[k][0];
+      var nr = r + dirs[k][1];
+      if (nc < 0 || nr < 0 || nc >= COLS || nr >= ROWS) continue;
+      var ni = idx(nc, nr);
+      if (walls[ni]) continue;
+      // 斜めは角抜けを防ぐ
+      if (dirs[k][2] > 1) {
+        if (walls[idx(c + dirs[k][0], r)] || walls[idx(c, r + dirs[k][1])]) continue;
+      }
+      out.push([ni, dirs[k][2]]);
+    }
+  }
+
+  var nbuf = [];
+
+  function expandOne() {
+    if (open.length === 0) {
+      done = true;
+      running = false;
+      found = false;
+      return false;
+    }
+    // 最小 f を線形探索
+    var bi = 0;
+    for (var i = 1; i < open.length; i++) {
+      if (f[open[i]] < f[open[bi]]) bi = i;
+    }
+    var cur = open[bi];
+    open.splice(bi, 1);
+    if (closed[cur]) return true;
+    closed[cur] = 1;
+    visited++;
+
+    if (cur === goal) {
+      done = true;
+      running = false;
+      found = true;
+      var p = cur;
+      path = [];
+      while (p !== -1) {
+        path.push(p);
+        p = from[p];
+      }
+      path.reverse();
+      return false;
+    }
+
+    neighbors(cur, nbuf);
+    for (var k = 0; k < nbuf.length; k++) {
+      var ni = nbuf[k][0];
+      var cost = nbuf[k][1];
+      if (closed[ni]) continue;
+      var tentative = g[cur] + cost;
+      if (tentative < g[ni]) {
+        from[ni] = cur;
+        g[ni] = tentative;
+        f[ni] = tentative + h(ni) * weight;
+        open.push(ni);
+      }
+    }
+    return true;
+  }
+
+  function step() {
+    if (!running) return;
+    var t0 = performance.now();
+    for (var n = 0; n < expansions; n++) {
+      if (!expandOne()) break;
+    }
+    solveMs = solveMs * 0.85 + (performance.now() - t0) * 0.15;
+  }
+
+  function draw() {
+    ctx.fillStyle = "#05080e";
+    ctx.fillRect(0, 0, COLS * CELL, ROWS * CELL);
+
+    // オープン
+    ctx.fillStyle = "rgba(251,191,36,.55)";
+    for (var o = 0; o < open.length; o++) {
+      var oi = open[o];
+      if (closed[oi]) continue;
+      ctx.fillRect(colOf(oi) * CELL + 1, rowOf(oi) * CELL + 1, CELL - 2, CELL - 2);
+    }
+
+    // クローズド
+    ctx.fillStyle = "rgba(45,212,191,.28)";
+    for (var c = 0; c < COLS * ROWS; c++) {
+      if (!closed[c]) continue;
+      ctx.fillRect(colOf(c) * CELL + 1, rowOf(c) * CELL + 1, CELL - 2, CELL - 2);
+    }
+
+    // 壁
+    ctx.fillStyle = "#22303f";
+    for (var w = 0; w < COLS * ROWS; w++) {
+      if (!walls[w]) continue;
+      ctx.fillRect(colOf(w) * CELL, rowOf(w) * CELL, CELL - 1, CELL - 1);
+    }
+
+    // 経路
+    if (path.length) {
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 3;
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      for (var p = 0; p < path.length; p++) {
+        var x = colOf(path[p]) * CELL + CELL / 2;
+        var y = rowOf(path[p]) * CELL + CELL / 2;
+        if (p === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+
+    // スタート・ゴール
+    ctx.fillStyle = "#4ade80";
+    ctx.fillRect(colOf(start) * CELL + 3, rowOf(start) * CELL + 3, CELL - 6, CELL - 6);
+    ctx.fillStyle = "#f472b6";
+    ctx.fillRect(colOf(goal) * CELL + 3, rowOf(goal) * CELL + 3, CELL - 6, CELL - 6);
+
+    msEl.textContent = solveMs.toFixed(2) + " ms / " + visited + " nodes";
+  }
+
+  var last = 0, frames = 0, fpsTimer = 0;
+  function loop(now) {
+    if (!last) { last = now; fpsTimer = now; }
+    last = now;
+    step();
+    draw();
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  function generateMaze() {
+    walls.fill(0);
+    for (var i = 0; i < COLS * ROWS; i++) {
+      if (Math.random() < density) walls[i] = 1;
+    }
+    // スタートとゴールのまわりは空ける
+    clearAround(start);
+    clearAround(goal);
+    resetSearch();
+  }
+
+  function clearAround(i) {
+    var c = colOf(i), r = rowOf(i);
+    for (var dy = -1; dy <= 1; dy++) {
+      for (var dx = -1; dx <= 1; dx++) {
+        var nc = c + dx, nr = r + dy;
+        if (nc < 0 || nr < 0 || nc >= COLS || nr >= ROWS) continue;
+        walls[idx(nc, nr)] = 0;
+      }
+    }
+  }
+
+  function pos(e) {
+    var rect = canvas.getBoundingClientRect();
+    var x = (e.clientX - rect.left) / rect.width * COLS;
+    var y = (e.clientY - rect.top) / rect.height * ROWS;
+    return { c: Math.floor(x), r: Math.floor(y) };
+  }
+
+  var painting = false;
+  var paintValue = 1;
+
+  canvas.addEventListener("pointerdown", function (e) {
+    e.preventDefault();
+    painting = true;
+    if (canvas.setPointerCapture) {
+      try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+    }
+    var p = pos(e);
+    if (p.c < 0 || p.r < 0 || p.c >= COLS || p.r >= ROWS) return;
+    var i = idx(p.c, p.r);
+    if (i === start || i === goal) return;
+    paintValue = walls[i] ? 0 : 1;
+    walls[i] = paintValue;
+    resetSearch();
+  });
+
+  canvas.addEventListener("pointermove", function (e) {
+    if (!painting) return;
+    e.preventDefault();
+    var p = pos(e);
+    if (p.c < 0 || p.r < 0 || p.c >= COLS || p.r >= ROWS) return;
+    var i = idx(p.c, p.r);
+    if (i === start || i === goal) return;
+    if (walls[i] !== paintValue) {
+      walls[i] = paintValue;
+      resetSearch();
+    }
+  });
+
+  function end() { painting = false; }
+  canvas.addEventListener("pointerup", end);
+  canvas.addEventListener("pointercancel", end);
+  canvas.addEventListener("pointerleave", end);
+
+  speedEl.addEventListener("input", function () {
+    expansions = Number(speedEl.value);
+    speedVal.textContent = String(expansions);
+  });
+  weightEl.addEventListener("input", function () {
+    weight = Number(weightEl.value);
+    weightVal.textContent = weight.toFixed(1);
+    resetSearch();
+  });
+  densityEl.addEventListener("input", function () {
+    density = Number(densityEl.value);
+    densityVal.textContent = density.toFixed(2);
+  });
+
+  document.getElementById("maze").addEventListener("click", generateMaze);
+  document.getElementById("clear").addEventListener("click", function () {
+    walls.fill(0);
+    resetSearch();
+  });
+  document.getElementById("diag").addEventListener("click", function () {
+    diagonal = !diagonal;
+    this.setAttribute("aria-pressed", diagonal ? "true" : "false");
+    resetSearch();
+  });
+
+  document.addEventListener("keydown", function (e) {
+    var tag = (e.target && e.target.tagName) || "";
+    if (tag === "INPUT" || tag === "BUTTON") return;
+    if (e.key === "r" || e.key === "R") generateMaze();
+    if (e.code === "Space") {
+      e.preventDefault();
+      running = !running;
+      if (running && done) resetSearch();
+    }
+  });
+
+  generateMaze();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
