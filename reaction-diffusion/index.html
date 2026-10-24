@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>反応拡散 — A と B が、模様になる。</title>
+<meta name="description" content="Gray-Scott モデルの反応拡散シミュレーション。2種類の物質の拡散と反応から、勝手に模様が生まれます。パラメータを動かして眺められます。">
+<meta property="og:title" content="反応拡散 — A と B が、模様になる。">
+<meta property="og:description" content="食べ物と毒の関係だけで、しま模様も斑点も生まれる。リアルタイム反応拡散シミュレーション。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/reaction-diffusion/">
+<meta property="og:site_name" content="反応拡散">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#07090f">
+<style>
+  :root{
+    --bg:#07090f;
+    --panel:#0f141d;
+    --ink:#e8f4f1;
+    --muted:rgba(232,244,241,.56);
+    --teal:#39d6c0;
+    --line:rgba(232,244,241,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #12303a 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #1a1630 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:640px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--teal);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.5rem,5.6vw,2rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.1em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{
+    position:relative;margin-top:10px;
+    border-radius:14px;overflow:hidden;
+    border:1px solid var(--line);
+    background:#05070c;
+    box-shadow:0 16px 40px rgba(0,0,0,.5);
+    touch-action:none;
+  }
+  #sim{display:block;width:100%;aspect-ratio:1/1;image-rendering:auto;cursor:crosshair}
+  .hint{
+    position:absolute;left:10px;bottom:10px;
+    font-size:10px;color:rgba(232,244,241,.5);letter-spacing:.06em;
+    pointer-events:none;
+  }
+
+  .presets{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  .presets button{
+    font:inherit;font-size:11.5px;font-weight:800;letter-spacing:.04em;
+    color:var(--muted);background:transparent;
+    border:1.5px solid var(--line);border-radius:999px;
+    padding:8px 13px;min-height:38px;cursor:pointer;
+    transition:border-color .15s,color .15s,background .15s;
+  }
+  .presets button:hover{color:var(--ink);border-color:var(--teal)}
+  .presets button[aria-pressed="true"]{background:var(--teal);color:#05201c;border-color:var(--teal)}
+  .presets button:focus-visible{outline:3px solid var(--teal);outline-offset:2px}
+
+  .panel{
+    margin-top:10px;padding:12px 14px;
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  }
+  .row{display:flex;align-items:center;gap:10px;padding:6px 0}
+  .row label{width:74px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.08em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--teal);min-width:0;cursor:pointer}
+  .row output{width:64px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0f141d;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--teal)}
+  .actions button:focus-visible{outline:3px solid var(--teal);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(232,244,241,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">GRAY-SCOTT MODEL</p>
+      <h1>反応拡散</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="sim" width="160" height="160" role="img" aria-label="反応拡散シミュレーションの模様"></canvas>
+    <div class="hint">クリック／ドラッグで種をまく</div>
+  </div>
+
+  <div class="presets" role="group" aria-label="模様のプリセット">
+    <button type="button" data-p="spots" aria-pressed="true">スポット</button>
+    <button type="button" data-p="stripes" aria-pressed="false">しま</button>
+    <button type="button" data-p="worms" aria-pressed="false">うず</button>
+    <button type="button" data-p="mitosis" aria-pressed="false">分裂</button>
+  </div>
+
+  <div class="panel">
+    <div class="row">
+      <label for="feed">feed</label>
+      <input id="feed" type="range" min="0.010" max="0.090" step="0.001" value="0.035">
+      <output id="feedVal">0.035</output>
+    </div>
+    <div class="row">
+      <label for="kill">kill</label>
+      <input id="kill" type="range" min="0.030" max="0.070" step="0.001" value="0.065">
+      <output id="killVal">0.065</output>
+    </div>
+    <div class="row">
+      <label for="speed">反復/フレーム</label>
+      <input id="speed" type="range" min="1" max="20" step="1" value="8">
+      <output id="speedVal">8</output>
+    </div>
+    <div class="row">
+      <label for="brush">筆の大きさ</label>
+      <input id="brush" type="range" min="2" max="16" step="1" value="6">
+      <output id="brushVal">6</output>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="pause">停止</button>
+    <button type="button" id="reset">リセット</button>
+  </div>
+
+  <p class="note">
+    <b>A + 2B → 3B</b> の反応と、A・B それぞれの拡散を毎フレーム計算しています。
+    feed は A の供給量、kill は B の消える量。この2つを少し動かすだけで、斑点・しま・渦・分裂と模様が変わります。
+    グリッドは 160×160、計算は CPU の JS です。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var N = 160;
+  var canvas = document.getElementById("sim");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var img = ctx.createImageData(N, N);
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var feedEl = document.getElementById("feed");
+  var killEl = document.getElementById("kill");
+  var speedEl = document.getElementById("speed");
+  var brushEl = document.getElementById("brush");
+  var feedVal = document.getElementById("feedVal");
+  var killVal = document.getElementById("killVal");
+  var speedVal = document.getElementById("speedVal");
+  var brushVal = document.getElementById("brushVal");
+
+  var A = new Float32Array(N * N);
+  var B = new Float32Array(N * N);
+  var A2 = new Float32Array(N * N);
+  var B2 = new Float32Array(N * N);
+
+  var DA = 1.0;
+  var DB = 0.5;
+  var DT = 1.0;
+  var feed = 0.035;
+  var kill = 0.065;
+  var iters = 8;
+  var brush = 6;
+  var paused = false;
+
+  var lut = new Uint8ClampedArray(256 * 3);
+  (function buildLut() {
+    for (var i = 0; i < 256; i++) {
+      var t = i / 255;
+      var r = Math.round(8 + 236 * Math.pow(t, 1.9));
+      var g = Math.round(12 + 232 * Math.pow(t, 0.85));
+      var b = Math.round(22 + 220 * Math.pow(t, 0.55));
+      lut[i * 3] = r;
+      lut[i * 3 + 1] = g;
+      lut[i * 3 + 2] = b;
+    }
+  })();
+
+  function seed(cx, cy, r) {
+    for (var y = -r; y <= r; y++) {
+      for (var x = -r; x <= r; x++) {
+        if (x * x + y * y > r * r) continue;
+        var px = (cx + x) | 0;
+        var py = (cy + y) | 0;
+        if (px < 1 || py < 1 || px >= N - 1 || py >= N - 1) continue;
+        var i = py * N + px;
+        B[i] = 1;
+        A[i] = 0.2;
+      }
+    }
+  }
+
+  function reset() {
+    A.fill(1);
+    B.fill(0);
+    var n = 12;
+    for (var k = 0; k < n; k++) {
+      seed(20 + Math.random() * (N - 40), 20 + Math.random() * (N - 40), 4 + Math.random() * 5);
+    }
+    if (paused) render();
+  }
+
+  function step() {
+    var f = feed, k = kill;
+    for (var y = 1; y < N - 1; y++) {
+      var row = y * N;
+      for (var x = 1; x < N - 1; x++) {
+        var i = row + x;
+        var a = A[i];
+        var b = B[i];
+        var lapA = (A[i - 1] + A[i + 1] + A[i - N] + A[i + N]) * 0.2 +
+                   (A[i - N - 1] + A[i - N + 1] + A[i + N - 1] + A[i + N + 1]) * 0.05 -
+                   a;
+        var lapB = (B[i - 1] + B[i + 1] + B[i - N] + B[i + N]) * 0.2 +
+                   (B[i - N - 1] + B[i - N + 1] + B[i + N - 1] + B[i + N + 1]) * 0.05 -
+                   b;
+        var reaction = a * b * b;
+        A2[i] = a + (DA * lapA - reaction + f * (1 - a)) * DT;
+        B2[i] = b + (DB * lapB + reaction - (k + f) * b) * DT;
+        if (A2[i] < 0) A2[i] = 0; else if (A2[i] > 1) A2[i] = 1;
+        if (B2[i] < 0) B2[i] = 0; else if (B2[i] > 1) B2[i] = 1;
+      }
+    }
+    // 端はコピー
+    for (var y2 = 0; y2 < N; y2++) {
+      A2[y2 * N] = A2[y2 * N + 1];
+      B2[y2 * N] = B2[y2 * N + 1];
+      A2[y2 * N + N - 1] = A2[y2 * N + N - 2];
+      B2[y2 * N + N - 1] = B2[y2 * N + N - 2];
+    }
+    for (var x2 = 0; x2 < N; x2++) {
+      A2[x2] = A2[N + x2];
+      B2[x2] = B2[N + x2];
+      A2[(N - 1) * N + x2] = A2[(N - 2) * N + x2];
+      B2[(N - 1) * N + x2] = B2[(N - 2) * N + x2];
+    }
+    var ta = A; A = A2; A2 = ta;
+    var tb = B; B = B2; B2 = tb;
+  }
+
+  function render() {
+    var data = img.data;
+    for (var i = 0, p = 0; i < N * N; i++, p += 4) {
+      var v = B[i] * 2.6;
+      if (v > 1) v = 1;
+      var idx = (v * 255) | 0;
+      var o = idx * 3;
+      data[p] = lut[o];
+      data[p + 1] = lut[o + 1];
+      data[p + 2] = lut[o + 2];
+      data[p + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+
+  var last = 0;
+  var frames = 0;
+  var fpsTimer = 0;
+  var smoothMs = 16;
+
+  function loop(now) {
+    if (!last) last = now;
+    var dtMs = now - last;
+    last = now;
+
+    if (!paused) {
+      var t0 = performance.now();
+      for (var n = 0; n < iters; n++) step();
+      var cost = performance.now() - t0;
+      smoothMs = smoothMs * 0.9 + cost * 0.1;
+      render();
+    }
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      msEl.textContent = smoothMs.toFixed(1) + " ms / " + iters + " iters";
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  function pos(e) {
+    var rect = canvas.getBoundingClientRect();
+    return {
+      x: Math.floor((e.clientX - rect.left) / rect.width * N),
+      y: Math.floor((e.clientY - rect.top) / rect.height * N)
+    };
+  }
+
+  var drawing = false;
+  canvas.addEventListener("pointerdown", function (e) {
+    e.preventDefault();
+    drawing = true;
+    if (canvas.setPointerCapture) {
+      try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+    }
+    var p = pos(e);
+    seed(p.x, p.y, brush);
+    if (paused) render();
+  });
+  canvas.addEventListener("pointermove", function (e) {
+    if (!drawing) return;
+    e.preventDefault();
+    var p = pos(e);
+    seed(p.x, p.y, brush);
+    if (paused) render();
+  });
+  function end() { drawing = false; }
+  canvas.addEventListener("pointerup", end);
+  canvas.addEventListener("pointercancel", end);
+  canvas.addEventListener("pointerleave", end);
+
+  feedEl.addEventListener("input", function () {
+    feed = Number(feedEl.value);
+    feedVal.textContent = feed.toFixed(3);
+  });
+  killEl.addEventListener("input", function () {
+    kill = Number(killEl.value);
+    killVal.textContent = kill.toFixed(3);
+  });
+  speedEl.addEventListener("input", function () {
+    iters = Number(speedEl.value);
+    speedVal.textContent = String(iters);
+  });
+  brushEl.addEventListener("input", function () {
+    brush = Number(brushEl.value);
+    brushVal.textContent = String(brush);
+  });
+
+  var PRESETS = {
+    spots: { f: 0.035, k: 0.065 },
+    stripes: { f: 0.030, k: 0.055 },
+    worms: { f: 0.058, k: 0.065 },
+    mitosis: { f: 0.0367, k: 0.0649 }
+  };
+
+  document.querySelectorAll(".presets button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var p = PRESETS[b.getAttribute("data-p")];
+      feed = p.f;
+      kill = p.k;
+      feedEl.value = String(feed);
+      killEl.value = String(kill);
+      feedVal.textContent = feed.toFixed(3);
+      killVal.textContent = kill.toFixed(3);
+      document.querySelectorAll(".presets button").forEach(function (x) {
+        x.setAttribute("aria-pressed", x === b ? "true" : "false");
+      });
+      reset();
+    });
+  });
+
+  document.getElementById("pause").addEventListener("click", function () {
+    paused = !paused;
+    this.textContent = paused ? "再開" : "停止";
+  });
+
+  document.getElementById("reset").addEventListener("click", reset);
+
+  document.addEventListener("keydown", function (e) {
+    var tag = (e.target && e.target.tagName) || "";
+    if (tag === "INPUT" || tag === "BUTTON") return;
+    if (e.code === "Space") {
+      e.preventDefault();
+      paused = !paused;
+      document.getElementById("pause").textContent = paused ? "再開" : "停止";
+    } else if (e.key === "r" || e.key === "R") {
+      reset();
+    }
+  });
+
+  reset();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
