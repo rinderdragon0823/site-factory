@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ボイド — 3つのルールで、群れになる。</title>
+<meta name="description" content="分離・整列・結合。3つの局所ルールだけで600羽が群れる、Boids のリアルタイムシミュレーション。知覚半径と重みを動かせます。">
+<meta property="og:title" content="ボイド — 3つのルールで、群れになる。">
+<meta property="og:description" content="近くの仲間を避けて、向きを合わせて、真ん中に寄る。それだけで群れが生まれます。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/boids-flock/">
+<meta property="og:site_name" content="ボイド">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c111b;
+    --ink:#e9f1f8;
+    --muted:rgba(233,241,248,.56);
+    --cyan:#5eead4;
+    --line:rgba(233,241,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #0f2a33 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #191430 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:720px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--cyan);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.5rem,5.6vw,2rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{
+    position:relative;margin-top:10px;border-radius:14px;overflow:hidden;
+    border:1px solid var(--line);background:#03050a;
+    box-shadow:0 16px 40px rgba(0,0,0,.55);
+    touch-action:none;
+  }
+  #flock{display:block;width:100%;height:auto;cursor:crosshair}
+  .hint{position:absolute;left:10px;bottom:8px;font-size:10px;color:rgba(233,241,248,.45);pointer-events:none}
+
+  .presets{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  .presets button{
+    flex:1 1 0;font:inherit;font-size:11.5px;font-weight:800;
+    color:var(--muted);background:transparent;border:1.5px solid var(--line);border-radius:999px;
+    padding:9px 10px;min-height:38px;cursor:pointer;
+  }
+  .presets button:hover{color:var(--ink);border-color:var(--cyan)}
+  .presets button[aria-pressed="true"]{background:var(--cyan);color:#04211f;border-color:var(--cyan)}
+  .presets button:focus-visible{outline:3px solid var(--cyan);outline-offset:2px}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:4px 0}
+  .row label{width:92px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--cyan);min-width:0;cursor:pointer}
+  .row output{width:56px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,241,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">BOIDS / FLOCKING</p>
+      <h1>ボイド</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms / 0 近傍</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="flock" width="720" height="540" role="img" aria-label="群れのシミュレーション"></canvas>
+    <div class="hint">クリックすると、その場所をしばらく避けます</div>
+  </div>
+
+  <div class="presets" role="group" aria-label="群れの preset">
+    <button type="button" data-p="flock" aria-pressed="true">群れ</button>
+    <button type="button" data-p="swirl" aria-pressed="false">渦</button>
+    <button type="button" data-p="scatter" aria-pressed="false">散開</button>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="radius">知覚半径</label><input id="radius" type="range" min="16" max="90" step="1" value="42"><output id="radiusVal">42</output></div>
+    <div class="row"><label for="sep">分離</label><input id="sep" type="range" min="0" max="4" step="0.1" value="1.6"><output id="sepVal">1.6</output></div>
+    <div class="row"><label for="ali">整列</label><input id="ali" type="range" min="0" max="4" step="0.1" value="1.0"><output id="aliVal">1.0</output></div>
+    <div class="row"><label for="coh">結合</label><input id="coh" type="range" min="0" max="4" step="0.1" value="0.8"><output id="cohVal">0.8</output></div>
+    <div class="row"><label for="spd">速度</label><input id="spd" type="range" min="1.2" max="4.5" step="0.1" value="2.6"><output id="spdVal">2.6</output></div>
+  </div>
+
+  <p class="note">
+    <b>分離（近すぎたら離れる）＋整列（向きを合わせる）＋結合（真ん中へ寄る）</b>。この3つを、知覚半径の中の仲間だけから計算しています。
+    全体を指揮する個体はいません。600羽ぶんの近傍探索は、空間を格子に切って 3×3 セルだけ見ることで軽くしています。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 720, H = 540;
+  var canvas = document.getElementById("flock");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+
+  var radiusEl = document.getElementById("radius");
+  var sepEl = document.getElementById("sep");
+  var aliEl = document.getElementById("ali");
+  var cohEl = document.getElementById("coh");
+  var spdEl = document.getElementById("spd");
+  var radiusVal = document.getElementById("radiusVal");
+  var sepVal = document.getElementById("sepVal");
+  var aliVal = document.getElementById("aliVal");
+  var cohVal = document.getElementById("cohVal");
+  var spdVal = document.getElementById("spdVal");
+
+  var N = 600;
+  var x = new Float32Array(N), y = new Float32Array(N);
+  var vx = new Float32Array(N), vy = new Float32Array(N);
+
+  var radius = 42;
+  var wSep = 1.6, wAli = 1.0, wCoh = 0.8;
+  var maxSpeed = 2.6;
+  var minSpeed = 0.9;
+  var sepRadius = 16;
+
+  var predX = -9999, predY = -9999, predT = 0;
+
+  // 空間ハッシュ
+  var cellSize = 48;
+  var gridCols = Math.ceil(W / cellSize) + 1;
+  var gridRows = Math.ceil(H / cellSize) + 1;
+  var cellHead = new Int32Array(gridCols * gridRows);
+  var cellNext = new Int32Array(N);
+
+  function init() {
+    for (var i = 0; i < N; i++) {
+      x[i] = Math.random() * W;
+      y[i] = Math.random() * H;
+      var a = Math.random() * 6.283;
+      var s = minSpeed + Math.random() * (maxSpeed - minSpeed);
+      vx[i] = Math.cos(a) * s;
+      vy[i] = Math.sin(a) * s;
+    }
+  }
+
+  function buildGrid() {
+    cellHead.fill(-1);
+    var cw = cellSize;
+    for (var i = 0; i < N; i++) {
+      var cx = (x[i] / cw) | 0;
+      var cy = (y[i] / cw) | 0;
+      if (cx < 0) cx = 0; else if (cx >= gridCols) cx = gridCols - 1;
+      if (cy < 0) cy = 0; else if (cy >= gridRows) cy = gridRows - 1;
+      var ci = cy * gridCols + cx;
+      cellNext[i] = cellHead[ci];
+      cellHead[ci] = i;
+    }
+  }
+
+  var avgNeighbors = 0;
+
+  function step() {
+    buildGrid();
+    var r2 = radius * radius;
+    var s2 = sepRadius * sepRadius;
+    var neighborSum = 0;
+
+    for (var i = 0; i < N; i++) {
+      var xi = x[i], yi = y[i];
+      var cx = (xi / cellSize) | 0;
+      var cy = (yi / cellSize) | 0;
+      var aliX = 0, aliY = 0, cohX = 0, cohY = 0, sepX = 0, sepY = 0;
+      var count = 0;
+
+      for (var gy = cy - 1; gy <= cy + 1; gy++) {
+        if (gy < 0 || gy >= gridRows) continue;
+        for (var gx = cx - 1; gx <= cx + 1; gx++) {
+          if (gx < 0 || gx >= gridCols) continue;
+          var j = cellHead[gy * gridCols + gx];
+          while (j !== -1) {
+            if (j !== i) {
+              var dx = x[j] - xi;
+              var dy = y[j] - yi;
+              var d2 = dx * dx + dy * dy;
+              if (d2 < r2 && d2 > 0.0001) {
+                count++;
+                aliX += vx[j]; aliY += vy[j];
+                cohX += dx; cohY += dy;
+                if (d2 < s2) {
+                  sepX -= dx / d2;
+                  sepY -= dy / d2;
+                }
+              }
+            }
+            j = cellNext[j];
+          }
+        }
+      }
+
+      neighborSum += count;
+
+      var ax = 0, ay = 0;
+      if (count > 0) {
+        aliX /= count; aliY /= count;
+        var al = Math.hypot(aliX, aliY);
+        if (al > 0) { ax += (aliX / al) * wAli; ay += (aliY / al) * wAli; }
+
+        cohX /= count; cohY /= count;
+        var cl = Math.hypot(cohX, cohY);
+        if (cl > 0) { ax += (cohX / cl) * wCoh; ay += (cohY / cl) * wCoh; }
+      }
+
+      var sl = Math.hypot(sepX, sepY);
+      if (sl > 0) { ax += (sepX / sl) * wSep; ay += (sepY / sl) * wSep; }
+
+      if (predT > 0) {
+        var pdx = xi - predX;
+        var pdy = yi - predY;
+        var pd = Math.hypot(pdx, pdy);
+        if (pd < 140 && pd > 0.01) {
+          ax += (pdx / pd) * (2.6 * (1 - pd / 140));
+          ay += (pdy / pd) * (2.6 * (1 - pd / 140));
+        }
+      }
+
+      vx[i] += ax * 0.12;
+      vy[i] += ay * 0.12;
+
+      var sp = Math.hypot(vx[i], vy[i]);
+      if (sp > maxSpeed) { vx[i] = vx[i] / sp * maxSpeed; vy[i] = vy[i] / sp * maxSpeed; }
+      else if (sp < minSpeed && sp > 0.0001) { vx[i] = vx[i] / sp * minSpeed; vy[i] = vy[i] / sp * minSpeed; }
+
+      x[i] += vx[i];
+      y[i] += vy[i];
+
+      if (x[i] < 0) x[i] += W; else if (x[i] >= W) x[i] -= W;
+      if (y[i] < 0) y[i] += H; else if (y[i] >= H) y[i] -= H;
+    }
+
+    avgNeighbors = neighborSum / N;
+    if (predT > 0) predT--;
+  }
+
+  function draw() {
+    ctx.fillStyle = "rgba(3,5,10,.22)";
+    ctx.fillRect(0, 0, W, H);
+
+    for (var i = 0; i < N; i++) {
+      var sp = Math.hypot(vx[i], vy[i]);
+      var ang = Math.atan2(vy[i], vx[i]);
+      var hue = 168 + Math.min(90, sp * 22);
+      ctx.save();
+      ctx.translate(x[i], y[i]);
+      ctx.rotate(ang);
+      ctx.fillStyle = "hsla(" + hue.toFixed(0) + ",88%,64%,.9)";
+      ctx.beginPath();
+      ctx.moveTo(5.2, 0);
+      ctx.lineTo(-3.4, 2.6);
+      ctx.lineTo(-3.4, -2.6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    if (predT > 0) {
+      ctx.strokeStyle = "rgba(255,120,120,.5)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(predX, predY, 26 + Math.sin(performance.now() / 120) * 4, 0, 6.283);
+      ctx.stroke();
+    }
+  }
+
+  var last = 0, frames = 0, fpsTimer = 0, smooth = 0;
+
+  function loop(now) {
+    if (!last) { last = now; fpsTimer = now; }
+    last = now;
+
+    var t0 = performance.now();
+    step();
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+    draw();
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      msEl.textContent = smooth.toFixed(2) + " ms / " + avgNeighbors.toFixed(1) + " 近傍";
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  var PRESETS = {
+    flock: { r: 42, s: 1.6, a: 1.0, c: 0.8 },
+    swirl: { r: 64, s: 1.1, a: 1.9, c: 0.45 },
+    scatter: { r: 28, s: 2.4, a: 0.2, c: 0.1 }
+  };
+
+  function applyPreset(p) {
+    var v = PRESETS[p];
+    radius = v.r; wSep = v.s; wAli = v.a; wCoh = v.c;
+    radiusEl.value = String(radius);
+    sepEl.value = String(wSep);
+    aliEl.value = String(wAli);
+    cohEl.value = String(wCoh);
+    radiusVal.textContent = String(radius);
+    sepVal.textContent = wSep.toFixed(1);
+    aliVal.textContent = wAli.toFixed(1);
+    cohVal.textContent = wCoh.toFixed(1);
+  }
+
+  document.querySelectorAll(".presets button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      document.querySelectorAll(".presets button").forEach(function (x2) {
+        x2.setAttribute("aria-pressed", x2 === b ? "true" : "false");
+      });
+      applyPreset(b.getAttribute("data-p"));
+    });
+  });
+
+  radiusEl.addEventListener("input", function () { radius = Number(radiusEl.value); radiusVal.textContent = String(radius); });
+  sepEl.addEventListener("input", function () { wSep = Number(sepEl.value); sepVal.textContent = wSep.toFixed(1); });
+  aliEl.addEventListener("input", function () { wAli = Number(aliEl.value); aliVal.textContent = wAli.toFixed(1); });
+  cohEl.addEventListener("input", function () { wCoh = Number(cohEl.value); cohVal.textContent = wCoh.toFixed(1); });
+  spdEl.addEventListener("input", function () {
+    maxSpeed = Number(spdEl.value);
+    spdVal.textContent = maxSpeed.toFixed(1);
+  });
+
+  canvas.addEventListener("pointerdown", function (e) {
+    e.preventDefault();
+    var rect = canvas.getBoundingClientRect();
+    predX = (e.clientX - rect.left) / rect.width * W;
+    predY = (e.clientY - rect.top) / rect.height * H;
+    predT = 240;
+  });
+
+  init();
+  ctx.fillStyle = "#03050a";
+  ctx.fillRect(0, 0, W, H);
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
