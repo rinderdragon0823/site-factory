@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>並べ替え — 比較と交換を、数える。</title>
+<meta name="description" content="バブル・クイック・マージの並べ替えを、比較と交換の回数つきで可視化。1フレームあたりの操作数を変えて、アルゴリズムの違いを見られます。">
+<meta property="og:title" content="並べ替え — 比較と交換を、数える。">
+<meta property="og:description" content="200本の棒が並んでいく様子を、比較回数と交換回数つきで。3つのアルゴリズムを見比べられます。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/sort-visualizer/">
+<meta property="og:site_name" content="並べ替え">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#06080e">
+<style>
+  :root{
+    --bg:#06080e;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.55);
+    --teal:#2dd4bf;
+    --amber:#fbbf24;
+    --red:#f87171;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #0f2a33 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #1a1430 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:760px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--teal);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.4rem,5.2vw,1.9rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+  #bars{display:block;width:100%;height:auto}
+
+  .algo{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  .algo button{
+    flex:1 1 0;font:inherit;font-size:12px;font-weight:800;
+    color:var(--muted);background:transparent;border:1.5px solid var(--line);border-radius:9px;
+    padding:9px 8px;min-height:40px;cursor:pointer;
+  }
+  .algo button:hover{color:var(--ink);border-color:var(--teal)}
+  .algo button[aria-pressed="true"]{background:var(--teal);color:#04211f;border-color:var(--teal)}
+  .algo button:focus-visible{outline:3px solid var(--teal);outline-offset:2px}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:110px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--teal);min-width:0;cursor:pointer}
+  .row output{width:64px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .counters{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:10.5px;color:var(--muted)}
+  .counters b{color:var(--ink);font-variant-numeric:tabular-nums;font-size:12px}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12.5px;font-weight:800;
+    color:var(--ink);background:#0c1119;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--teal)}
+  .actions button:focus-visible{outline:3px solid var(--teal);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">SORTING / STEP BY STEP</p>
+      <h1>並べ替え</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="elapsed">0.0 秒</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="bars" width="720" height="420" role="img" aria-label="並べ替えの棒グラフ"></canvas>
+  </div>
+
+  <div class="algo" role="group" aria-label="アルゴリズム">
+    <button type="button" data-a="bubble" aria-pressed="false">バブル</button>
+    <button type="button" data-a="quick" aria-pressed="true">クイック</button>
+    <button type="button" data-a="merge" aria-pressed="false">マージ</button>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="speed">操作/フレーム</label><input id="speed" type="range" min="1" max="200" step="1" value="6"><output id="speedVal">6</output></div>
+    <div class="counters">
+      <span>比較 <b id="cmps">0</b></span>
+      <span>交換 <b id="swps">0</b></span>
+      <span>書き込み <b id="wrts">0</b></span>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="play">停止</button>
+    <button type="button" id="shuffle">シャッフル</button>
+  </div>
+
+  <p class="note">
+    <b>200本の棒</b>を、バブル／クイック／マージで並べ替えます。各アルゴリズムは「比較した」「交換した」を1手ずつ返す形で書いてあり、
+    1フレームに何手進めるかを変えられます。黄＝比較中、赤＝交換、緑＝確定。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var N = 200;
+  var W = 720, H = 420;
+  var canvas = document.getElementById("bars");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var fpsEl = document.getElementById("fps");
+  var elapsedEl = document.getElementById("elapsed");
+  var speedEl = document.getElementById("speed");
+  var speedVal = document.getElementById("speedVal");
+  var cmpsEl = document.getElementById("cmps");
+  var swpsEl = document.getElementById("swps");
+  var wrtsEl = document.getElementById("wrts");
+
+  var arr = [];
+  var gen = null;
+  var algo = "quick";
+  var ops = 6;
+  var comparisons = 0, swaps = 0, writes = 0;
+  var finished = false;
+  var running = true;
+  var startedAt = 0;
+  var elapsed = 0;
+  var hiA = -1, hiB = -1, hiKind = "";
+
+  function shuffle() {
+    arr = new Array(N);
+    for (var i = 0; i < N; i++) arr[i] = i + 1;
+    for (var j = N - 1; j > 0; j--) {
+      var k = Math.floor(Math.random() * (j + 1));
+      var t = arr[j]; arr[j] = arr[k]; arr[k] = t;
+    }
+  }
+
+  function* bubble(a) {
+    for (var end = a.length - 1; end > 0; end--) {
+      var swapped = false;
+      for (var i = 0; i < end; i++) {
+        yield { kind: "cmp", a: i, b: i + 1 };
+        if (a[i] > a[i + 1]) {
+          var t = a[i]; a[i] = a[i + 1]; a[i + 1] = t;
+          yield { kind: "swap", a: i, b: i + 1 };
+          swapped = true;
+        }
+      }
+      if (!swapped) break;
+    }
+  }
+
+  function* quick(a) {
+    var stack = [[0, a.length - 1]];
+    while (stack.length) {
+      var range = stack.pop();
+      var lo = range[0], hi = range[1];
+      if (lo >= hi) continue;
+      var pivot = a[hi];
+      var i = lo;
+      for (var j = lo; j < hi; j++) {
+        yield { kind: "cmp", a: j, b: hi };
+        if (a[j] < pivot) {
+          if (i !== j) {
+            var t = a[i]; a[i] = a[j]; a[j] = t;
+            yield { kind: "swap", a: i, b: j };
+          }
+          i++;
+        }
+      }
+      if (i !== hi) {
+        var t2 = a[i]; a[i] = a[hi]; a[hi] = t2;
+        yield { kind: "swap", a: i, b: hi };
+      }
+      stack.push([lo, i - 1]);
+      stack.push([i + 1, hi]);
+    }
+  }
+
+  function* merge(a) {
+    var n = a.length;
+    var tmp = new Array(n);
+    for (var w = 1; w < n; w *= 2) {
+      for (var lo = 0; lo < n; lo += 2 * w) {
+        var mid = Math.min(lo + w, n);
+        var hi = Math.min(lo + 2 * w, n);
+        var i = lo, j = mid, k = lo;
+        while (i < mid && j < hi) {
+          yield { kind: "cmp", a: i, b: j };
+          if (a[i] <= a[j]) tmp[k++] = a[i++];
+          else tmp[k++] = a[j++];
+        }
+        while (i < mid) tmp[k++] = a[i++];
+        while (j < hi) tmp[k++] = a[j++];
+        for (var t = lo; t < hi; t++) {
+          if (a[t] !== tmp[t]) {
+            a[t] = tmp[t];
+            yield { kind: "write", a: t, b: -1 };
+          }
+        }
+      }
+    }
+  }
+
+  var ALGOS = { bubble: bubble, quick: quick, merge: merge };
+
+  function restart() {
+    gen = ALGOS[algo](arr);
+    comparisons = 0; swaps = 0; writes = 0;
+    finished = false;
+    running = true;
+    startedAt = performance.now();
+    elapsed = 0;
+    hiA = hiB = -1;
+    hiKind = "";
+    cmpsEl.textContent = "0";
+    swpsEl.textContent = "0";
+    wrtsEl.textContent = "0";
+    document.getElementById("play").textContent = "停止";
+  }
+
+  function newRun() {
+    shuffle();
+    restart();
+  }
+
+  function advance() {
+    if (finished || !gen) return;
+    for (var n = 0; n < ops; n++) {
+      var r = gen.next();
+      if (r.done) {
+        finished = true;
+        hiA = hiB = -1;
+        hiKind = "";
+        elapsed = (performance.now() - startedAt) / 1000;
+        return;
+      }
+      var e = r.value;
+      hiA = e.a;
+      hiB = e.b;
+      hiKind = e.kind;
+      if (e.kind === "cmp") comparisons++;
+      else if (e.kind === "swap") swaps++;
+      else writes++;
+    }
+  }
+
+  function draw() {
+    ctx.fillStyle = "#03050a";
+    ctx.fillRect(0, 0, W, H);
+
+    var bw = W / N;
+    for (var i = 0; i < N; i++) {
+      var v = arr[i] / N;
+      var h = v * (H - 20);
+      var x = i * bw;
+      var y = H - h;
+
+      var color;
+      if (finished) color = "rgba(45,212,191,.85)";
+      else if (i === hiA || i === hiB) color = hiKind === "swap" ? "#f87171" : "#fbbf24";
+      else color = "hsla(" + (196 + v * 70).toFixed(0) + ",70%,58%,.75)";
+
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y, Math.max(1, bw - 1), h);
+    }
+
+    if (finished) {
+      ctx.fillStyle = "rgba(233,239,248,.75)";
+      ctx.font = '800 16px "Hiragino Sans","Yu Gothic",system-ui,sans-serif';
+      ctx.textAlign = "center";
+      ctx.fillText("整列しました — 比較 " + comparisons + " 回 / 交換 " + swaps + " 回 / 書き込み " + writes + " 回", W / 2, 30);
+    }
+  }
+
+  var frames = 0, fpsTimer = 0;
+  function loop(now) {
+    if (!fpsTimer) fpsTimer = now;
+    if (running && !finished) {
+      advance();
+      cmpsEl.textContent = String(comparisons);
+      swpsEl.textContent = String(swaps);
+      wrtsEl.textContent = String(writes);
+      elapsedEl.textContent = ((now - startedAt) / 1000).toFixed(1) + " 秒";
+    }
+    draw();
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  document.querySelectorAll(".algo button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      algo = b.getAttribute("data-a");
+      document.querySelectorAll(".algo button").forEach(function (x) {
+        x.setAttribute("aria-pressed", x === b ? "true" : "false");
+      });
+      newRun();
+    });
+  });
+
+  speedEl.addEventListener("input", function () {
+    ops = Number(speedEl.value);
+    speedVal.textContent = String(ops);
+  });
+
+  document.getElementById("play").addEventListener("click", function () {
+    if (finished) { newRun(); return; }
+    running = !running;
+    this.textContent = running ? "停止" : "再開";
+  });
+
+  document.getElementById("shuffle").addEventListener("click", newRun);
+
+  document.addEventListener("keydown", function (e) {
+    var tag = (e.target && e.target.tagName) || "";
+    if (tag === "INPUT" || tag === "BUTTON") return;
+    if (e.code === "Space") {
+      e.preventDefault();
+      if (finished) newRun();
+      else { running = !running; document.getElementById("play").textContent = running ? "停止" : "再開"; }
+    }
+  });
+
+  shuffle();
+  restart();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
