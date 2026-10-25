@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>レイキャスト迷路 — 1本の光線で、迷路を描く。</title>
+<meta name="description" content="DDAレイキャスティングで迷路を三人称っぽく描く技術デモ。WASDで歩けて、放置すると自動で散歩します。">
+<meta property="og:title" content="レイキャスト迷路 — 1本の光線で、迷路を描く。">
+<meta property="og:description" content="画面の列ごとに光線を飛ばして壁までの距離を測る。それだけで迷路の中に立てます。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/raycaster-maze/">
+<meta property="og:site_name" content="レイキャスト迷路">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --cyan:#67e8f9;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #102a3a 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #1a1430 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:760px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--cyan);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.4rem,5.2vw,1.9rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{position:relative;margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#02040a;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+  #view{display:block;width:100%;height:auto;image-rendering:pixelated;touch-action:none}
+  #map{position:absolute;right:10px;top:10px;width:84px;height:84px;border-radius:6px;border:1px solid rgba(233,239,248,.25);background:rgba(4,8,14,.72)}
+  .hint{position:absolute;left:10px;bottom:8px;font-size:10px;color:rgba(233,239,248,.5);pointer-events:none}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:110px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--cyan);min-width:0;cursor:pointer}
+  .row output{width:64px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0c1119;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--cyan)}
+  .actions button[aria-pressed="true"]{background:var(--cyan);color:#04212a;border-color:var(--cyan)}
+  .actions button:focus-visible{outline:3px solid var(--cyan);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">DDA RAYCASTING</p>
+      <h1>レイキャスト迷路</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms / 480 列</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="view" width="480" height="300" role="img" aria-label="レイキャストで描いた迷路の視界"></canvas>
+    <canvas id="map" width="84" height="84" aria-hidden="true"></canvas>
+    <div class="hint">WASD / 矢印キーで歩く。放置すると自動で散歩します</div>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="fov">視野角</label><input id="fov" type="range" min="50" max="100" step="1" value="66"><output id="fovVal">66°</output></div>
+    <div class="row"><label for="fog">霧の強さ</label><input id="fog" type="range" min="0" max="1" step="0.05" value="0.55"><output id="fogVal">0.55</output></div>
+    <div class="row"><label for="spd">歩く速さ</label><input id="spd" type="range" min="0.5" max="3" step="0.1" value="1.4"><output id="spdVal">1.4</output></div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="auto" aria-pressed="true">自動散歩</button>
+    <button type="button" id="regen">マップを変える</button>
+  </div>
+
+  <p class="note">
+    <b>画面の480列それぞれに光線を飛ばし、壁に当たるまでの距離を測って縦線を引く</b>。それだけで奥行きが出ます（DDA）。
+    壁の色は距離で暗く、面の向きで少し変えています。マップは24×24の迷路を毎回生成しています。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var MW = 24, MH = 24;
+  var map = new Uint8Array(MW * MH);
+  var W = 480, H = 300;
+  var canvas = document.getElementById("view");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var mapCanvas = document.getElementById("map");
+  var mctx = mapCanvas.getContext("2d");
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var fovEl = document.getElementById("fov");
+  var fogEl = document.getElementById("fog");
+  var spdEl = document.getElementById("spd");
+  var fovVal = document.getElementById("fovVal");
+  var fogVal = document.getElementById("fogVal");
+  var spdVal = document.getElementById("spdVal");
+
+  var px = 1.5, py = 1.5;
+  var dirX = 1, dirY = 0;
+  var planeX = 0, planeY = 0.66;
+  var fovDeg = 66;
+  var fog = 0.55;
+  var speed = 1.4;
+  var auto = true;
+  var keys = {};
+
+  var WALL_COLORS = [
+    [96, 132, 168],
+    [126, 108, 168],
+    [96, 168, 150],
+    [168, 132, 96]
+  ];
+
+  function idx(cx, cy) { return cy * MW + cx; }
+  function wall(cx, cy) {
+    if (cx < 0 || cy < 0 || cx >= MW || cy >= MH) return 2;
+    return map[idx(cx, cy)];
+  }
+
+  function setFov(deg) {
+    fovDeg = deg;
+    var planeLen = Math.tan(deg * Math.PI / 360);
+    planeX = -dirY * planeLen;
+    planeY = dirX * planeLen;
+  }
+
+  function genMaze() {
+    map.fill(1);
+    var stack = [[1, 1]];
+    map[idx(1, 1)] = 0;
+    var dirs = [[2, 0], [-2, 0], [0, 2], [0, -2]];
+
+    while (stack.length) {
+      var cur = stack[stack.length - 1];
+      var cx = cur[0], cy = cur[1];
+      // シャッフル
+      for (var i = dirs.length - 1; i > 0; i--) {
+        var j = Math.floor(Math.random() * (i + 1));
+        var t = dirs[i]; dirs[i] = dirs[j]; dirs[j] = t;
+      }
+      var moved = false;
+      for (var d = 0; d < 4; d++) {
+        var nx = cx + dirs[d][0];
+        var ny = cy + dirs[d][1];
+        if (nx > 0 && ny > 0 && nx < MW - 1 && ny < MH - 1 && map[idx(nx, ny)] === 1) {
+          map[idx(cx + dirs[d][0] / 2, cy + dirs[d][1] / 2)] = 0;
+          map[idx(nx, ny)] = 0;
+          stack.push([nx, ny]);
+          moved = true;
+          break;
+        }
+      }
+      if (!moved) stack.pop();
+    }
+
+    // 壁に色の種類を振る
+    for (var k = 0; k < map.length; k++) {
+      if (map[k] > 0) map[k] = 1 + ((Math.random() * 4) | 0);
+    }
+
+    // ループを少し作る
+    for (var l = 0; l < 26; l++) {
+      var rx = 1 + ((Math.random() * (MW - 2)) | 0);
+      var ry = 1 + ((Math.random() * (MH - 2)) | 0);
+      map[idx(rx, ry)] = 0;
+    }
+
+    // ところどころ部屋を空ける
+    for (var room = 0; room < 10; room++) {
+      var rw = 3 + ((Math.random() * 2) | 0);
+      var rh = 3 + ((Math.random() * 2) | 0);
+      var sx = 1 + ((Math.random() * Math.max(1, MW - 2 - rw)) | 0);
+      var sy = 1 + ((Math.random() * Math.max(1, MH - 2 - rh)) | 0);
+      for (var yy = sy; yy < Math.min(MH - 1, sy + rh); yy++) {
+        for (var xx = sx; xx < Math.min(MW - 1, sx + rw); xx++) {
+          map[idx(xx, yy)] = 0;
+        }
+      }
+    }
+
+    px = 1.5; py = 1.5;
+    if (wall(2, 1)) { dirX = 0; dirY = 1; }
+    else { dirX = 1; dirY = 0; }
+    setFov(fovDeg);
+  }
+
+  function tryMove(nx, ny) {
+    var r = 0.18;
+    if (!wall(Math.floor(nx + Math.sign(nx - px) * r), Math.floor(py))) { /* noop */ }
+    if (!wall(Math.floor(nx), Math.floor(py))) px = nx;
+    if (!wall(Math.floor(px), Math.floor(ny))) py = ny;
+  }
+
+  function step(dt) {
+    var move = 0, turn = 0;
+    if (keys.w || keys.ArrowUp) move += 1;
+    if (keys.s || keys.ArrowDown) move -= 1;
+    if (keys.a || keys.ArrowLeft) turn -= 1;
+    if (keys.d || keys.ArrowRight) turn += 1;
+
+    if (auto && !move && !turn) {
+      move = 1;
+      var aheadX = px + dirX * 0.45;
+      var aheadY = py + dirY * 0.45;
+      if (wall(Math.floor(aheadX), Math.floor(aheadY))) {
+        turn = 0.8;
+        move = 0.15;
+      } else if (Math.random() < 0.012) {
+        turn = (Math.random() < 0.5 ? -0.7 : 0.7);
+      }
+    }
+
+    if (turn) {
+      var ang = turn * 1.9 * dt;
+      var cs = Math.cos(ang), sn = Math.sin(ang);
+      var ndx = dirX * cs - dirY * sn;
+      var ndy = dirX * sn + dirY * cs;
+      dirX = ndx; dirY = ndy;
+      setFov(fovDeg);
+    }
+
+    if (move) {
+      var vx = dirX * move * speed * dt;
+      var vy = dirY * move * speed * dt;
+      tryMove(px + vx, py + vy);
+    }
+  }
+
+  function draw() {
+    var t0 = performance.now();
+
+    // 天井と床
+    var sky = ctx.createLinearGradient(0, 0, 0, H / 2);
+    sky.addColorStop(0, "#0a1526");
+    sky.addColorStop(1, "#12233a");
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, H / 2);
+
+    var floor = ctx.createLinearGradient(0, H / 2, 0, H);
+    floor.addColorStop(0, "#1a2430");
+    floor.addColorStop(1, "#0a0e14");
+    ctx.fillStyle = floor;
+    ctx.fillRect(0, H / 2, W, H / 2);
+
+    for (var x = 0; x < W; x++) {
+      var cameraX = 2 * x / W - 1;
+      var rdx = dirX + planeX * cameraX;
+      var rdy = dirY + planeY * cameraX;
+
+      var mapX = Math.floor(px);
+      var mapY = Math.floor(py);
+
+      var deltaX = Math.abs(1 / rdx);
+      var deltaY = Math.abs(1 / rdy);
+
+      var stepX = rdx < 0 ? -1 : 1;
+      var stepY = rdy < 0 ? -1 : 1;
+
+      var sideX = rdx < 0 ? (px - mapX) * deltaX : (mapX + 1 - px) * deltaX;
+      var sideY = rdy < 0 ? (py - mapY) * deltaY : (mapY + 1 - py) * deltaY;
+
+      var side = 0;
+      var hit = 0;
+      var guard = 0;
+
+      while (guard++ < 64) {
+        if (sideX < sideY) {
+          sideX += deltaX;
+          mapX += stepX;
+          side = 0;
+        } else {
+          sideY += deltaY;
+          mapY += stepY;
+          side = 1;
+        }
+        var cell = wall(mapX, mapY);
+        if (cell) { hit = cell; break; }
+      }
+
+      if (!hit) continue;
+
+      var perp = side === 0 ? (sideX - deltaX) : (sideY - deltaY);
+      if (perp < 0.02) perp = 0.02;
+
+      var lineH = H / perp;
+      var y0 = H / 2 - lineH / 2;
+      var base = WALL_COLORS[(hit - 1) % WALL_COLORS.length];
+      var shade = Math.max(0.12, 1.12 - perp * (0.09 + fog * 0.10));
+      if (side === 1) shade *= 0.74;
+
+      var wallX = side === 0 ? (py + perp * rdy) : (px + perp * rdx);
+      wallX -= Math.floor(wallX);
+      shade *= 0.78 + 0.22 * Math.sin(wallX * 26 + (side ? 1.7 : 0.2));
+      var r = Math.round(base[0] * shade);
+      var g = Math.round(base[1] * shade);
+      var b = Math.round(base[2] * shade);
+
+      ctx.fillStyle = "rgb(" + r + "," + g + "," + b + ")";
+      ctx.fillRect(x, y0, 1, lineH);
+    }
+
+    msEl.textContent = (performance.now() - t0).toFixed(1) + " ms / " + W + " 列";
+    drawMap();
+  }
+
+  function drawMap() {
+    mctx.clearRect(0, 0, 84, 84);
+    var s = 84 / MW;
+    for (var y = 0; y < MH; y++) {
+      for (var x = 0; x < MW; x++) {
+        if (map[idx(x, y)]) {
+          mctx.fillStyle = "rgba(233,239,248,.28)";
+          mctx.fillRect(x * s, y * s, s, s);
+        }
+      }
+    }
+    mctx.fillStyle = "#67e8f9";
+    mctx.beginPath();
+    mctx.arc(px * s, py * s, 2.4, 0, 6.283);
+    mctx.fill();
+    mctx.strokeStyle = "rgba(103,232,249,.9)";
+    mctx.beginPath();
+    mctx.moveTo(px * s, py * s);
+    mctx.lineTo((px + dirX * 1.6) * s, (py + dirY * 1.6) * s);
+    mctx.stroke();
+  }
+
+  var last = 0, frames = 0, fpsTimer = 0;
+  function loop(now) {
+    if (!last) { last = now; fpsTimer = now; }
+    var dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+
+    step(dt);
+    draw();
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  document.addEventListener("keydown", function (e) {
+    keys[e.key] = true;
+    if (e.key === " " || e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "ArrowLeft" || e.key === "ArrowRight") e.preventDefault();
+    if (e.key === "r" || e.key === "R") genMaze();
+  });
+  document.addEventListener("keyup", function (e) { keys[e.key] = false; });
+
+  // タッチ: 左右タップで旋回、前タップで前進
+  canvas.addEventListener("pointerdown", function (e) {
+    e.preventDefault();
+    var rect = canvas.getBoundingClientRect();
+    var x = (e.clientX - rect.left) / rect.width;
+    if (x < 0.3) keys.ArrowLeft = true;
+    else if (x > 0.7) keys.ArrowRight = true;
+    else keys.ArrowUp = true;
+    window.setTimeout(function () { keys.ArrowLeft = keys.ArrowRight = keys.ArrowUp = false; }, 260);
+  });
+
+  fovEl.addEventListener("input", function () {
+    setFov(Number(fovEl.value));
+    fovVal.textContent = fovDeg + "°";
+  });
+  fogEl.addEventListener("input", function () { fog = Number(fogEl.value); fogVal.textContent = fog.toFixed(2); });
+  spdEl.addEventListener("input", function () { speed = Number(spdEl.value); spdVal.textContent = speed.toFixed(1); });
+
+  document.getElementById("auto").addEventListener("click", function () {
+    auto = !auto;
+    this.setAttribute("aria-pressed", auto ? "true" : "false");
+  });
+  document.getElementById("regen").addEventListener("click", genMaze);
+
+  genMaze();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
