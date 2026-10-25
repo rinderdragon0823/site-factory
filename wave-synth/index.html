@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>波形シンセ — 音を、目で見る。</title>
+<meta name="description" content="2つのオシレーターとフィルターで作るドローン音を、オシロスコープとスペクトラムで可視化。波形・デチューン・フィルターを動かして、音の形を見られます。">
+<meta property="og:title" content="波形シンセ — 音を、目で見る。">
+<meta property="og:description" content="音は波。波形とスペクトラムをその場で見ながら、フィルターを動かせる小さなシンセサイザー。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/wave-synth/">
+<meta property="og:site_name" content="波形シンセ">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070d">
+<style>
+  :root{
+    --bg:#05070d;
+    --panel:#0c111b;
+    --ink:#e8f0fa;
+    --muted:rgba(232,240,250,.56);
+    --cyan:#5ee7ff;
+    --amber:#ffc857;
+    --line:rgba(232,240,250,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #10263a 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #1a1430 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:720px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--cyan);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.5rem,5.6vw,2rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{
+    margin-top:10px;border-radius:14px;overflow:hidden;
+    border:1px solid var(--line);
+    background:#03050a;
+    box-shadow:0 16px 40px rgba(0,0,0,.55);
+    position:relative;
+  }
+  #scope{display:block;width:100%;height:auto}
+  .badge{
+    position:absolute;left:12px;top:10px;font-size:9.5px;letter-spacing:.24em;
+    color:rgba(232,240,250,.5);font-weight:800;pointer-events:none;
+  }
+  .badge.b{top:auto;bottom:auto;top:52.5%}
+
+  .waves{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  .waves button{
+    flex:1 1 0;min-height:40px;font:inherit;font-size:11.5px;font-weight:800;
+    color:var(--muted);background:transparent;border:1.5px solid var(--line);border-radius:9px;
+    cursor:pointer;padding:8px 6px;
+  }
+  .waves button:hover{color:var(--ink);border-color:var(--cyan)}
+  .waves button[aria-pressed="true"]{background:var(--cyan);color:#04222a;border-color:var(--cyan)}
+  .waves button:focus-visible{outline:3px solid var(--cyan);outline-offset:2px}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:92px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--cyan);min-width:0;cursor:pointer}
+  .row output{width:70px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  #power{
+    flex:1;font:inherit;font-size:16px;font-weight:900;letter-spacing:.06em;
+    color:#04222a;background:var(--cyan);border:2px solid #062028;border-radius:12px;
+    padding:14px;min-height:54px;cursor:pointer;
+    box-shadow:4px 4px 0 #062028;transition:transform .08s,box-shadow .08s;
+  }
+  #power:active{transform:translate(2px,2px);box-shadow:2px 2px 0 #062028}
+  #power.off{background:var(--amber)}
+  #power:focus-visible{outline:3px solid #fff;outline-offset:3px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(232,240,250,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">OSC + FFT</p>
+      <h1>波形シンセ</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="sr">44.1 kHz / -- ms</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="scope" width="900" height="540" role="img" aria-label="波形とスペクトラムの表示"></canvas>
+    <div class="badge">OSCILLOSCOPE — 時間領域</div>
+    <div class="badge b">SPECTRUM — 周波数領域</div>
+  </div>
+
+  <div class="waves" role="group" aria-label="波形">
+    <button type="button" data-w="sine" aria-pressed="true">サイン</button>
+    <button type="button" data-w="sawtooth" aria-pressed="false">ノコギリ</button>
+    <button type="button" data-w="square" aria-pressed="false">矩形</button>
+    <button type="button" data-w="triangle" aria-pressed="false">三角</button>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="freq">音程</label><input id="freq" type="range" min="55" max="440" step="1" value="110"><output id="freqVal">110 Hz</output></div>
+    <div class="row"><label for="detune">デチューン</label><input id="detune" type="range" min="0" max="40" step="1" value="8"><output id="detuneVal">8 cent</output></div>
+    <div class="row"><label for="cutoff">フィルター</label><input id="cutoff" type="range" min="120" max="8000" step="10" value="1200"><output id="cutoffVal">1200 Hz</output></div>
+    <div class="row"><label for="q">レゾナンス</label><input id="q" type="range" min="0.5" max="18" step="0.5" value="6"><output id="qVal">6.0</output></div>
+    <div class="row"><label for="gain">音量</label><input id="gain" type="range" min="0" max="0.35" step="0.01" value="0.12"><output id="gainVal">0.12</output></div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="power">音を出す</button>
+  </div>
+
+  <p class="note">
+    <b>2つのオシレーター → ローパスフィルター → アナライザー</b>。上の線は時間領域（波形）、下の棒は FFT の周波数スペクトラムです。
+    デチューンを上げると2つの波がぶつかってうなり、フィルターを下げると高い成分から消えていきます。音が出ます。音量に注意。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var canvas = document.getElementById("scope");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var W = 900, H = 540;
+  var fpsEl = document.getElementById("fps");
+  var srEl = document.getElementById("sr");
+  var powerBtn = document.getElementById("power");
+
+  var freqEl = document.getElementById("freq");
+  var detuneEl = document.getElementById("detune");
+  var cutoffEl = document.getElementById("cutoff");
+  var qEl = document.getElementById("q");
+  var gainEl = document.getElementById("gain");
+  var freqVal = document.getElementById("freqVal");
+  var detuneVal = document.getElementById("detuneVal");
+  var cutoffVal = document.getElementById("cutoffVal");
+  var qVal = document.getElementById("qVal");
+  var gainVal = document.getElementById("gainVal");
+
+  var ac = null, osc1 = null, osc2 = null, filter = null, master = null, analyser = null;
+  var timeData = null, freqData = null;
+  var running = false;
+  var wave = "sine";
+
+  function build() {
+    if (ac) return;
+    var AC = window.AudioContext || window.webkitAudioContext;
+    ac = new AC();
+    osc1 = ac.createOscillator();
+    osc2 = ac.createOscillator();
+    filter = ac.createBiquadFilter();
+    master = ac.createGain();
+    analyser = ac.createAnalyser();
+
+    osc1.type = wave;
+    osc2.type = wave;
+    osc1.frequency.value = Number(freqEl.value);
+    osc2.frequency.value = Number(freqEl.value);
+    osc2.detune.value = Number(detuneEl.value);
+
+    filter.type = "lowpass";
+    filter.frequency.value = Number(cutoffEl.value);
+    filter.Q.value = Number(qEl.value);
+
+    master.gain.value = 0;
+
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.8;
+    timeData = new Uint8Array(analyser.fftSize);
+    freqData = new Uint8Array(analyser.frequencyBinCount);
+
+    osc1.connect(filter);
+    osc2.connect(filter);
+    filter.connect(master);
+    master.connect(analyser);
+    analyser.connect(ac.destination);
+
+    osc1.start();
+    osc2.start();
+    srEl.textContent = (ac.sampleRate / 1000).toFixed(1) + " kHz / " + ((ac.baseLatency || 0) * 1000).toFixed(1) + " ms";
+  }
+
+  function setGain(v, ramp) {
+    if (!master) return;
+    var t = ac.currentTime;
+    master.gain.cancelScheduledValues(t);
+    master.gain.setValueAtTime(master.gain.value, t);
+    master.gain.linearRampToValueAtTime(v, t + (ramp || 0.08));
+  }
+
+  function start() {
+    build();
+    if (ac.state === "suspended") ac.resume();
+    setGain(Number(gainEl.value), 0.35);
+    running = true;
+    powerBtn.textContent = "音を止める";
+    powerBtn.classList.add("off");
+  }
+
+  function stop() {
+    setGain(0, 0.2);
+    running = false;
+    powerBtn.textContent = "音を出す";
+    powerBtn.classList.remove("off");
+  }
+
+  powerBtn.addEventListener("click", function () {
+    if (running) stop(); else start();
+  });
+
+  document.querySelectorAll(".waves button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      wave = b.getAttribute("data-w");
+      document.querySelectorAll(".waves button").forEach(function (x) {
+        x.setAttribute("aria-pressed", x === b ? "true" : "false");
+      });
+      if (osc1) { osc1.type = wave; osc2.type = wave; }
+    });
+  });
+
+  freqEl.addEventListener("input", function () {
+    var v = Number(freqEl.value);
+    freqVal.textContent = v + " Hz";
+    if (osc1) { osc1.frequency.setTargetAtTime(v, ac.currentTime, 0.02); osc2.frequency.setTargetAtTime(v, ac.currentTime, 0.02); }
+  });
+
+  detuneEl.addEventListener("input", function () {
+    var v = Number(detuneEl.value);
+    detuneVal.textContent = v + " cent";
+    if (osc2) osc2.detune.setTargetAtTime(v, ac.currentTime, 0.02);
+  });
+
+  cutoffEl.addEventListener("input", function () {
+    var v = Number(cutoffEl.value);
+    cutoffVal.textContent = v + " Hz";
+    if (filter) filter.frequency.setTargetAtTime(v, ac.currentTime, 0.03);
+  });
+
+  qEl.addEventListener("input", function () {
+    var v = Number(qEl.value);
+    qVal.textContent = v.toFixed(1);
+    if (filter) filter.Q.setTargetAtTime(v, ac.currentTime, 0.03);
+  });
+
+  gainEl.addEventListener("input", function () {
+    var v = Number(gainEl.value);
+    gainVal.textContent = v.toFixed(2);
+    if (running) setGain(v, 0.05);
+  });
+
+  document.addEventListener("keydown", function (e) {
+    var tag = (e.target && e.target.tagName) || "";
+    if (tag === "INPUT" || tag === "BUTTON") return;
+    if (e.code === "Space") {
+      e.preventDefault();
+      if (running) stop(); else start();
+    }
+  });
+
+  function wavePath(data, yMid, amp) {
+    ctx.beginPath();
+    for (var i = 0; i < data.length; i++) {
+      var x = (i / (data.length - 1)) * W;
+      var y = yMid + ((data[i] - 128) / 128) * amp;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+  }
+
+  function draw() {
+    ctx.fillStyle = "#03050a";
+    ctx.fillRect(0, 0, W, H);
+
+    // グリッド
+    ctx.strokeStyle = "rgba(94,231,255,.08)";
+    ctx.lineWidth = 1;
+    for (var gx = 0; gx <= W; gx += 50) {
+      ctx.beginPath(); ctx.moveTo(gx, 20); ctx.lineTo(gx, 250); ctx.stroke();
+    }
+    for (var gy = 20; gy <= 250; gy += 46) {
+      ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.moveTo(0, 135); ctx.lineTo(W, 135);
+    ctx.strokeStyle = "rgba(94,231,255,.25)";
+    ctx.stroke();
+
+    ctx.strokeStyle = "rgba(255,200,87,.08)";
+    for (var bx = 0; bx <= W; bx += 50) {
+      ctx.beginPath(); ctx.moveTo(bx, 300); ctx.lineTo(bx, 520); ctx.stroke();
+    }
+
+    if (!analyser) {
+      ctx.fillStyle = "rgba(232,240,250,.35)";
+      ctx.font = '700 16px "Hiragino Sans","Yu Gothic",system-ui,sans-serif';
+      ctx.textAlign = "center";
+      ctx.fillText("「音を出す」を押すと、波形とスペクトラムが動きます", W / 2, 285);
+      return;
+    }
+
+    analyser.getByteTimeDomainData(timeData);
+    analyser.getByteFrequencyData(freqData);
+
+    // 波形
+    ctx.strokeStyle = "rgba(94,231,255,.25)";
+    ctx.lineWidth = 6;
+    wavePath(timeData, 135, 100);
+    ctx.stroke();
+    ctx.strokeStyle = "#5ee7ff";
+    ctx.lineWidth = 2;
+    wavePath(timeData, 135, 100);
+    ctx.stroke();
+
+    // スペクトラム（対数っぽい間引き）
+    var bars = 96;
+    var bw = W / bars;
+    for (var b = 0; b < bars; b++) {
+      var f0 = Math.floor(Math.pow(b / bars, 2.2) * freqData.length);
+      var f1 = Math.floor(Math.pow((b + 1) / bars, 2.2) * freqData.length);
+      var peak = 0;
+      for (var k = f0; k < f1 && k < freqData.length; k++) {
+        if (freqData[k] > peak) peak = freqData[k];
+      }
+      var h = (peak / 255) * 210;
+      var y = 515 - h;
+      var grad = ctx.createLinearGradient(0, 515, 0, 515 - 210);
+      grad.addColorStop(0, "rgba(94,231,255,.25)");
+      grad.addColorStop(1, "rgba(94,231,255,.95)");
+      ctx.fillStyle = grad;
+      ctx.fillRect(b * bw + 1, y, Math.max(1, bw - 2), h);
+    }
+
+    // ピーク周波数
+    var maxI = 0;
+    for (var m = 1; m < freqData.length; m++) if (freqData[m] > freqData[maxI]) maxI = m;
+    var hz = maxI * ac.sampleRate / analyser.fftSize;
+    ctx.fillStyle = "rgba(232,240,250,.55)";
+    ctx.font = '700 12px "Hiragino Sans","Yu Gothic",system-ui,sans-serif';
+    ctx.textAlign = "right";
+    ctx.fillText("peak " + Math.round(hz) + " Hz", W - 12, 292);
+    ctx.textAlign = "left";
+    ctx.fillText((ac.sampleRate / 1000).toFixed(1) + " kHz / FFT " + analyser.fftSize, 12, 44);
+  }
+
+  var frames = 0, fpsTimer = 0;
+  function loop(now) {
+    if (!fpsTimer) fpsTimer = now;
+    draw();
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
