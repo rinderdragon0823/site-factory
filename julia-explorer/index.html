@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ジュリア集合 — z ← z² + c を、見る。</title>
+<meta name="description" content="複素数 z を z² + c で繰り返すと、模様が生まれます。c を動かしながら、ジュリア集合をリアルタイムで描画する技術デモ。">
+<meta property="og:title" content="ジュリア集合 — z ← z² + c を、見る。">
+<meta property="og:description" content="たった1行の漸化式から、無限の模様。c を回すと形が変わり続けるジュリア集合エクスプローラー。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/julia-explorer/">
+<meta property="og:site_name" content="ジュリア集合">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#06070d">
+<style>
+  :root{
+    --bg:#06070d;
+    --panel:#0c0f18;
+    --ink:#e9eefb;
+    --muted:rgba(233,238,251,.56);
+    --cyan:#6ee7ff;
+    --line:rgba(233,238,251,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 88% -10%, #14243d 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #241430 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:560px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--cyan);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.4rem,5.2vw,1.9rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{
+    position:relative;margin-top:10px;
+    border-radius:14px;overflow:hidden;
+    border:1px solid var(--line);
+    background:#02030a;
+    box-shadow:0 16px 44px rgba(0,0,0,.6);
+    touch-action:none;
+  }
+  #julia{display:block;width:100%;aspect-ratio:1/1;cursor:grab}
+  #julia:active{cursor:grabbing}
+  .cval{
+    position:absolute;left:10px;bottom:8px;font-size:10px;color:rgba(233,238,251,.55);
+    letter-spacing:.06em;pointer-events:none;font-variant-numeric:tabular-nums;
+  }
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:86px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--cyan);min-width:0;cursor:pointer}
+  .row output{width:66px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .actions{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+  .actions button{
+    flex:1 1 28%;font:inherit;font-size:11.5px;font-weight:800;
+    color:var(--ink);background:#0c0f18;border:1.5px solid var(--line);border-radius:10px;
+    padding:10px 8px;min-height:42px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--cyan)}
+  .actions button[aria-pressed="true"]{background:var(--cyan);color:#04222a;border-color:var(--cyan)}
+  .actions button:focus-visible{outline:3px solid var(--cyan);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,238,251,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">JULIA SET</p>
+      <h1>ジュリア集合</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="julia" width="420" height="420" role="img" aria-label="ジュリア集合の描画"></canvas>
+    <div class="cval" id="cval">c = 0.788 + 0.000i</div>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="maxit">反復上限</label><input id="maxit" type="range" min="20" max="200" step="5" value="80"><output id="maxitVal">80</output></div>
+    <div class="row"><label for="cre">c 実部</label><input id="cre" type="range" min="-1.2" max="1.2" step="0.002" value="0.788"><output id="creVal">0.788</output></div>
+    <div class="row"><label for="cim">c 虚部</label><input id="cim" type="range" min="-1.2" max="1.2" step="0.002" value="0"><output id="cimVal">0.000</output></div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="animate" aria-pressed="true">c を回す</button>
+    <button type="button" id="color">色を変える</button>
+    <button type="button" id="zoomIn">拡大</button>
+    <button type="button" id="zoomOut">縮小</button>
+    <button type="button" id="reset">リセット</button>
+  </div>
+
+  <p class="note">
+    <b>z ← z² + c</b>。複素数 z を何度も2乗して c を足す。値がどこまでも大きくならずに残る点が集合で、逃げた回数が色になります。
+    ドラッグで移動、ホイールで拡大。c を円を描くように動かすと、形がゆっくり変わります。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 420, H = 420;
+  var canvas = document.getElementById("julia");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var img = ctx.createImageData(W, H);
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var cvalEl = document.getElementById("cval");
+  var maxitEl = document.getElementById("maxit");
+  var creEl = document.getElementById("cre");
+  var cimEl = document.getElementById("cim");
+  var maxitVal = document.getElementById("maxitVal");
+  var creVal = document.getElementById("creVal");
+  var cimVal = document.getElementById("cimVal");
+
+  var view = 2.6;
+  var ox = 0, oy = 0;
+  var maxIter = 80;
+  var cRe = 0.788, cIm = 0;
+  var angle = 0;
+  var animate = true;
+  var palette = 0;
+  var paused = false;
+
+  var LUT = new Uint8Array(1024 * 3);
+
+  function buildLut() {
+    for (var i = 0; i < 1024; i++) {
+      var t = i / 1024;
+      var r, g, b;
+      if (palette === 0) {
+        r = 0.5 + 0.5 * Math.cos(6.283 * (t + 0.00));
+        g = 0.5 + 0.5 * Math.cos(6.283 * (t + 0.33));
+        b = 0.5 + 0.5 * Math.cos(6.283 * (t + 0.67));
+      } else if (palette === 1) {
+        r = Math.pow(t, 0.7);
+        g = Math.pow(t, 1.6) * 0.75;
+        b = Math.pow(t, 3.0) * 0.9;
+      } else {
+        r = 0.5 + 0.5 * Math.cos(6.283 * (t * 1.5 + 0.9));
+        g = 0.5 + 0.5 * Math.cos(6.283 * (t * 1.5 + 0.45));
+        b = 0.5 + 0.5 * Math.cos(6.283 * (t * 1.5 + 0.10));
+      }
+      LUT[i * 3] = Math.max(0, Math.min(255, r * 255)) | 0;
+      LUT[i * 3 + 1] = Math.max(0, Math.min(255, g * 255)) | 0;
+      LUT[i * 3 + 2] = Math.max(0, Math.min(255, b * 255)) | 0;
+    }
+  }
+
+  function render() {
+    var data = img.data;
+    var p = 0;
+    var scale = view / W;
+    var half = W / 2;
+    var ci = cIm, cr = cRe;
+    var maxI = maxIter;
+
+    for (var py = 0; py < H; py++) {
+      var zy0 = (py - half) * scale + oy;
+      for (var px = 0; px < W; px++) {
+        var zx = (px - half) * scale + ox;
+        var zy = zy0;
+        var x2 = zx * zx;
+        var y2 = zy * zy;
+        var i = 0;
+
+        while (x2 + y2 <= 4 && i < maxI) {
+          zy = 2 * zx * zy + ci;
+          zx = x2 - y2 + cr;
+          x2 = zx * zx;
+          y2 = zy * zy;
+          i++;
+        }
+
+        if (i >= maxI) {
+          data[p] = 4;
+          data[p + 1] = 5;
+          data[p + 2] = 12;
+        } else {
+          var logZn = Math.log(x2 + y2) * 0.5;
+          var nu = Math.log(logZn / Math.LN2) / Math.LN2;
+          var idx = ((i + 1 - nu) * 0.12 * 1024) | 0;
+          idx = ((idx % 1024) + 1024) % 1024;
+          var o = idx * 3;
+          data[p] = LUT[o];
+          data[p + 1] = LUT[o + 1];
+          data[p + 2] = LUT[o + 2];
+        }
+        data[p + 3] = 255;
+        p += 4;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+
+  var frames = 0, fpsTimer = 0, smoothMs = 0;
+
+  function loop(now) {
+    if (!fpsTimer) fpsTimer = now;
+    if (!paused) {
+      if (animate) {
+        angle += 0.006;
+        cRe = 0.788 * Math.cos(angle);
+        cIm = 0.788 * Math.sin(angle);
+        creEl.value = String(cRe.toFixed(3));
+        cimEl.value = String(cIm.toFixed(3));
+        creVal.textContent = cRe.toFixed(3);
+        cimVal.textContent = cIm.toFixed(3);
+      }
+      var t0 = performance.now();
+      render();
+      smoothMs = smoothMs * 0.85 + (performance.now() - t0) * 0.15;
+      cvalEl.textContent = "c = " + cRe.toFixed(3) + " " + (cIm >= 0 ? "+" : "−") + " " + Math.abs(cIm).toFixed(3) + "i";
+    }
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      msEl.textContent = smoothMs.toFixed(1) + " ms / " + maxIter + " iters";
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  maxitEl.addEventListener("input", function () {
+    maxIter = Number(maxitEl.value);
+    maxitVal.textContent = String(maxIter);
+  });
+
+  creEl.addEventListener("input", function () {
+    cRe = Number(creEl.value);
+    creVal.textContent = cRe.toFixed(3);
+    animate = false;
+    document.getElementById("animate").setAttribute("aria-pressed", "false");
+  });
+
+  cimEl.addEventListener("input", function () {
+    cIm = Number(cimEl.value);
+    cimVal.textContent = cIm.toFixed(3);
+    animate = false;
+    document.getElementById("animate").setAttribute("aria-pressed", "false");
+  });
+
+  document.getElementById("animate").addEventListener("click", function () {
+    animate = !animate;
+    this.setAttribute("aria-pressed", animate ? "true" : "false");
+  });
+
+  document.getElementById("color").addEventListener("click", function () {
+    palette = (palette + 1) % 3;
+    buildLut();
+  });
+
+  function zoom(factor) {
+    view = Math.max(0.02, Math.min(6, view * factor));
+  }
+
+  document.getElementById("zoomIn").addEventListener("click", function () { zoom(0.7); });
+  document.getElementById("zoomOut").addEventListener("click", function () { zoom(1 / 0.7); });
+  document.getElementById("reset").addEventListener("click", function () {
+    view = 2.6;
+    ox = 0;
+    oy = 0;
+    maxIter = 80;
+    maxitEl.value = "80";
+    maxitVal.textContent = "80";
+    animate = true;
+    document.getElementById("animate").setAttribute("aria-pressed", "true");
+  });
+
+  var dragging = false, lastX = 0, lastY = 0;
+  canvas.addEventListener("pointerdown", function (e) {
+    e.preventDefault();
+    dragging = true;
+    lastX = e.clientX;
+    lastY = e.clientY;
+    if (canvas.setPointerCapture) {
+      try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+    }
+  });
+  canvas.addEventListener("pointermove", function (e) {
+    if (!dragging) return;
+    var rect = canvas.getBoundingClientRect();
+    var dx = (e.clientX - lastX) / rect.width * view;
+    var dy = (e.clientY - lastY) / rect.height * view;
+    ox -= dx;
+    oy -= dy;
+    lastX = e.clientX;
+    lastY = e.clientY;
+  });
+  function endDrag() { dragging = false; }
+  canvas.addEventListener("pointerup", endDrag);
+  canvas.addEventListener("pointercancel", endDrag);
+  canvas.addEventListener("pointerleave", endDrag);
+
+  canvas.addEventListener("wheel", function (e) {
+    e.preventDefault();
+    zoom(e.deltaY > 0 ? 1.12 : 0.89);
+  }, { passive: false });
+
+  document.addEventListener("keydown", function (e) {
+    var tag = (e.target && e.target.tagName) || "";
+    if (tag === "INPUT" || tag === "BUTTON") return;
+    if (e.code === "Space") {
+      e.preventDefault();
+      paused = !paused;
+    } else if (e.key === "+" || e.key === "=") {
+      zoom(0.8);
+    } else if (e.key === "-") {
+      zoom(1.25);
+    }
+  });
+
+  buildLut();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
