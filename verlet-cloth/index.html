@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>布 — ばねと重力で、布は揺れる。</title>
+<meta name="description" content="Verlet積分と距離制約で布をシミュレーション。重力・風・反復回数を動かして、布の落ち方と揺れ方を見られます。">
+<meta property="og:title" content="布 — ばねと重力で、布は揺れる。">
+<meta property="og:description" content="点と点をつないだばねを、毎フレーム引き伸ばして戻す。それだけで布になります。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/verlet-cloth/">
+<meta property="og:site_name" content="布">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --rose:#f9a8d4;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #2a1430 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #10263a 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:720px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--rose);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.5rem,5.6vw,2rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{position:relative;margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+  #cloth{display:block;width:100%;height:auto;cursor:grab;touch-action:none}
+  #cloth:active{cursor:grabbing}
+  .hint{position:absolute;left:10px;bottom:8px;font-size:10px;color:rgba(233,239,248,.45);pointer-events:none}
+
+  .presets{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  .presets button{
+    flex:1 1 0;font:inherit;font-size:11.5px;font-weight:800;
+    color:var(--muted);background:transparent;border:1.5px solid var(--line);border-radius:999px;
+    padding:9px 10px;min-height:38px;cursor:pointer;
+  }
+  .presets button:hover{color:var(--ink);border-color:var(--rose)}
+  .presets button[aria-pressed="true"]{background:var(--rose);color:#2a0b1c;border-color:var(--rose)}
+  .presets button:focus-visible{outline:3px solid var(--rose);outline-offset:2px}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:104px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--rose);min-width:0;cursor:pointer}
+  .row output{width:60px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0c1119;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--rose)}
+  .actions button:focus-visible{outline:3px solid var(--rose);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">VERLET CLOTH</p>
+      <h1>布</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms / 0 制約</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="cloth" width="640" height="420" role="img" aria-label="布のシミュレーション"></canvas>
+    <div class="hint">ドラッグで布をつまんで引っぱれます</div>
+  </div>
+
+  <div class="presets" role="group" aria-label="風のプリセット">
+    <button type="button" data-p="calm" aria-pressed="false">そよ風</button>
+    <button type="button" data-p="windy" aria-pressed="true">強風</button>
+    <button type="button" data-p="still" aria-pressed="false">無風</button>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="grav">重力</label><input id="grav" type="range" min="0" max="1.2" step="0.02" value="0.42"><output id="gravVal">0.42</output></div>
+    <div class="row"><label for="wind">風</label><input id="wind" type="range" min="0" max="1.2" step="0.02" value="0.55"><output id="windVal">0.55</output></div>
+    <div class="row"><label for="iter">制約の反復</label><input id="iter" type="range" min="1" max="10" step="1" value="3"><output id="iterVal">3</output></div>
+    <div class="row"><label for="stiff">ばねの硬さ</label><input id="stiff" type="range" min="0.4" max="1" step="0.02" value="0.62"><output id="stiffVal">0.62</output></div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="reset">吊り直す</button>
+  </div>
+
+  <p class="note">
+    <b>位置を前の位置との差分で動かす（Verlet）</b>だけ、というのが基本。あとは「つないだ2点の距離を、元の長さに戻す」を毎フレーム何回か繰り返すと、布らしくなります。
+    30×22の点、約2,400本の制約。上端は固定しています。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var COLS = 30, ROWS = 22, SP = 15;
+  var W = 640, H = 420;
+  var canvas = document.getElementById("cloth");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var gravEl = document.getElementById("grav");
+  var windEl = document.getElementById("wind");
+  var iterEl = document.getElementById("iter");
+  var stiffEl = document.getElementById("stiff");
+  var gravVal = document.getElementById("gravVal");
+  var windVal = document.getElementById("windVal");
+  var iterVal = document.getElementById("iterVal");
+  var stiffVal = document.getElementById("stiffVal");
+
+  var pts = [];
+  var cons = [];
+  var gravity = 0.42;
+  var wind = 0.55;
+  var iters = 3;
+  var stiffness = 0.62;
+  var time = 0;
+  var dragIdx = -1;
+
+  var START_X = (W - (COLS - 1) * SP) / 2;
+  var START_Y = 34;
+
+  function build() {
+    pts = [];
+    cons = [];
+    for (var y = 0; y < ROWS; y++) {
+      for (var x = 0; x < COLS; x++) {
+        pts.push({
+          x: START_X + x * SP,
+          y: START_Y + y * SP,
+          px: START_X + x * SP,
+          py: START_Y + y * SP,
+          pinned: y === 0 && (x % 3 === 0 || x === COLS - 1)
+        });
+      }
+    }
+    function id(x, y) { return y * COLS + x; }
+    for (var yy = 0; yy < ROWS; yy++) {
+      for (var xx = 0; xx < COLS; xx++) {
+        if (xx < COLS - 1) cons.push([id(xx, yy), id(xx + 1, yy)]);
+        if (yy < ROWS - 1) cons.push([id(xx, yy), id(xx, yy + 1)]);
+        if (xx < COLS - 1 && yy < ROWS - 1) {
+          cons.push([id(xx, yy), id(xx + 1, yy + 1)]);
+          cons.push([id(xx + 1, yy), id(xx, yy + 1)]);
+        }
+      }
+    }
+    for (var c = 0; c < cons.length; c++) {
+      var a = pts[cons[c][0]], b = pts[cons[c][1]];
+      cons[c].push(Math.hypot(a.x - b.x, a.y - b.y));
+    }
+  }
+
+  function step() {
+    time += 1;
+
+    for (var i = 0; i < pts.length; i++) {
+      var p = pts[i];
+      if (p.pinned) continue;
+      var vx = (p.x - p.px) * 0.995;
+      var vy = (p.y - p.py) * 0.995;
+      p.px = p.x;
+      p.py = p.y;
+      var w = (Math.sin(time * 0.05 + p.x * 0.02) + Math.sin(time * 0.021 + p.y * 0.05)) * wind * 1.6;
+      p.x += vx + w;
+      p.y += vy + gravity;
+    }
+
+    for (var k = 0; k < iters; k++) {
+      for (var c = 0; c < cons.length; c++) {
+        var c0 = cons[c][0], c1 = cons[c][1], rest = cons[c][2];
+        var a = pts[c0], b = pts[c1];
+        var dx = b.x - a.x;
+        var dy = b.y - a.y;
+        var d = Math.sqrt(dx * dx + dy * dy) || 0.0001;
+        var diff = (d - rest) / d * 0.5 * stiffness;
+        var ox = dx * diff;
+        var oy = dy * diff;
+        if (!a.pinned) { a.x += ox; a.y += oy; }
+        if (!b.pinned) { b.x -= ox; b.y -= oy; }
+      }
+    }
+  }
+
+  function draw() {
+    ctx.fillStyle = "#03050a";
+    ctx.fillRect(0, 0, W, H);
+
+    // 布
+    for (var y = 0; y < ROWS - 1; y++) {
+      for (var x = 0; x < COLS - 1; x++) {
+        var i0 = y * COLS + x;
+        var i1 = i0 + 1;
+        var i2 = i0 + COLS;
+        var i3 = i2 + 1;
+        var p0 = pts[i0], p1 = pts[i1], p2 = pts[i2], p3 = pts[i3];
+
+        var stretch = Math.hypot(p1.x - p0.x, p1.y - p0.y) / SP;
+        var t = Math.min(1, Math.max(0, (stretch - 0.85) / 0.5));
+        var hue = 330 - t * 90;
+        var light = 44 + (1 - y / ROWS) * 22;
+
+        var fill = "hsl(" + hue.toFixed(0) + ",72%," + light.toFixed(0) + "%)";
+        ctx.fillStyle = fill;
+        ctx.strokeStyle = fill;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(p0.x, p0.y);
+        ctx.lineTo(p1.x, p1.y);
+        ctx.lineTo(p3.x, p3.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+
+    // 固定点
+    for (var i = 0; i < pts.length; i++) {
+      if (pts[i].pinned) {
+        ctx.fillStyle = "rgba(255,255,255,.85)";
+        ctx.beginPath();
+        ctx.arc(pts[i].x, pts[i].y, 2.6, 0, 6.283);
+        ctx.fill();
+      }
+    }
+  }
+
+  var last = 0, frames = 0, fpsTimer = 0, smooth = 0;
+  function loop(now) {
+    if (!fpsTimer) { fpsTimer = now; last = now; }
+    last = now;
+
+    var t0 = performance.now();
+    step();
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+    draw();
+    time += 0;
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      msEl.textContent = smooth.toFixed(2) + " ms / " + cons.length + " 制約";
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  function nearest(x, y) {
+    var best = -1, bd = 26 * 26;
+    for (var i = 0; i < pts.length; i++) {
+      var dx = pts[i].x - x, dy = pts[i].y - y;
+      var d2 = dx * dx + dy * dy;
+      if (d2 < bd) { bd = d2; best = i; }
+    }
+    return best;
+  }
+
+  function localPos(e) {
+    var rect = canvas.getBoundingClientRect();
+    return {
+      x: (e.clientX - rect.left) / rect.width * W,
+      y: (e.clientY - rect.top) / rect.height * H
+    };
+  }
+
+  canvas.addEventListener("pointerdown", function (e) {
+    e.preventDefault();
+    var p = localPos(e);
+    dragIdx = nearest(p.x, p.y);
+    if (canvas.setPointerCapture) {
+      try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+    }
+  });
+
+  canvas.addEventListener("pointermove", function (e) {
+    if (dragIdx < 0) return;
+    e.preventDefault();
+    var p = localPos(e);
+    var pt = pts[dragIdx];
+    pt.px = pt.x;
+    pt.py = pt.y;
+    pt.x = p.x;
+    pt.y = p.y;
+  });
+
+  function endDrag() { dragIdx = -1; }
+  canvas.addEventListener("pointerup", endDrag);
+  canvas.addEventListener("pointercancel", endDrag);
+  canvas.addEventListener("pointerleave", endDrag);
+
+  gravEl.addEventListener("input", function () { gravity = Number(gravEl.value); gravVal.textContent = gravity.toFixed(2); });
+  windEl.addEventListener("input", function () { wind = Number(windEl.value); windVal.textContent = wind.toFixed(2); });
+  iterEl.addEventListener("input", function () { iters = Number(iterEl.value); iterVal.textContent = String(iters); });
+  stiffEl.addEventListener("input", function () { stiffness = Number(stiffEl.value); stiffVal.textContent = stiffness.toFixed(2); });
+
+  var PRESETS = {
+    calm: { g: 0.35, w: 0.18 },
+    windy: { g: 0.42, w: 0.55 },
+    still: { g: 0.55, w: 0.0 }
+  };
+
+  document.querySelectorAll(".presets button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var p = PRESETS[b.getAttribute("data-p")];
+      gravity = p.g; wind = p.w;
+      gravEl.value = String(gravity);
+      windEl.value = String(wind);
+      gravVal.textContent = gravity.toFixed(2);
+      windVal.textContent = wind.toFixed(2);
+      document.querySelectorAll(".presets button").forEach(function (x) {
+        x.setAttribute("aria-pressed", x === b ? "true" : "false");
+      });
+    });
+  });
+
+  document.getElementById("reset").addEventListener("click", build);
+
+  document.addEventListener("keydown", function (e) {
+    var tag = (e.target && e.target.tagName) || "";
+    if (tag === "INPUT" || tag === "BUTTON") return;
+    if (e.key === "r" || e.key === "R") build();
+  });
+
+  build();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
