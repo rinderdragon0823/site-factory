@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>水面 — 波は、隣に伝わる。</title>
+<meta name="description" content="2次元波動方程式で水面をシミュレーション。クリックで雫を落として、波が広がって反射する様子を見られます。">
+<meta property="og:title" content="水面 — 波は、隣に伝わる。">
+<meta property="og:description" content="高さの違う2枚の水面を交互に更新するだけ。それだけで波紋が広がります。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/water-ripple/">
+<meta property="og:site_name" content="水面">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#04070e">
+<style>
+  :root{
+    --bg:#04070e;
+    --panel:#0a1220;
+    --ink:#e8f2fb;
+    --muted:rgba(232,242,251,.56);
+    --cyan:#67e8f9;
+    --line:rgba(232,242,251,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #0d2a3d 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #141a33 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:680px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--cyan);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.5rem,5.6vw,2rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{position:relative;margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#02040a;box-shadow:0 16px 40px rgba(0,0,0,.55);touch-action:none}
+  #water{display:block;width:100%;aspect-ratio:1/1;cursor:crosshair}
+  .hint{position:absolute;left:10px;bottom:8px;font-size:10px;color:rgba(232,242,251,.5);pointer-events:none}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:100px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--cyan);min-width:0;cursor:pointer}
+  .row output{width:62px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0a1220;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--cyan)}
+  .actions button[aria-pressed="true"]{background:var(--cyan);color:#04212a;border-color:var(--cyan)}
+  .actions button:focus-visible{outline:3px solid var(--cyan);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(232,242,251,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">2D WAVE EQUATION</p>
+      <h1>水面</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms / 200×200</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="water" width="200" height="200" role="img" aria-label="水面の波紋"></canvas>
+    <div class="hint">クリックで雫を落とせます</div>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="speed">波の速さ</label><input id="speed" type="range" min="0.08" max="0.32" step="0.01" value="0.22"><output id="speedVal">0.22</output></div>
+    <div class="row"><label for="damp">減衰</label><input id="damp" type="range" min="0.90" max="0.999" step="0.001" value="0.986"><output id="dampVal">0.986</output></div>
+    <div class="row"><label for="amp">雫の強さ</label><input id="amp" type="range" min="0.2" max="1.5" step="0.05" value="0.8"><output id="ampVal">0.80</output></div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="drops">雫を落とす</button>
+    <button type="button" id="rain" aria-pressed="false">雨を降らす</button>
+    <button type="button" id="calm">凪にする</button>
+  </div>
+
+  <p class="note">
+    <b>各マスの高さを「前の高さ」と「隣4マスとの差」から更新する</b>だけ。波は隣へ伝わり、端で反射します。
+    200×200の升目を毎フレーム2枚ぶん計算し、傾きから法線を作って光を当てています。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var N = 200;
+  var canvas = document.getElementById("water");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var img = ctx.createImageData(N, N);
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var speedEl = document.getElementById("speed");
+  var dampEl = document.getElementById("damp");
+  var ampEl = document.getElementById("amp");
+  var speedVal = document.getElementById("speedVal");
+  var dampVal = document.getElementById("dampVal");
+  var ampVal = document.getElementById("ampVal");
+
+  var cur = new Float32Array(N * N);
+  var prev = new Float32Array(N * N);
+  var next = new Float32Array(N * N);
+
+  var speed = 0.22;
+  var damp = 0.986;
+  var amp = 0.8;
+  var rain = false;
+
+  function drop(cx, cy, strength) {
+    var r = 4;
+    for (var y = -r; y <= r; y++) {
+      for (var x = -r; x <= r; x++) {
+        var d2 = x * x + y * y;
+        if (d2 > r * r) continue;
+        var px = Math.round(cx) + x;
+        var py = Math.round(cy) + y;
+        if (px < 1 || py < 1 || px >= N - 1 || py >= N - 1) continue;
+        cur[py * N + px] += strength * (1 - d2 / (r * r));
+      }
+    }
+  }
+
+  function step() {
+    for (var y = 1; y < N - 1; y++) {
+      var row = y * N;
+      for (var x = 1; x < N - 1; x++) {
+        var i = row + x;
+        var c = cur[i];
+        var lap = cur[i - 1] + cur[i + 1] + cur[i - N] + cur[i + N] - 4 * c;
+        var v = (c + (c - prev[i]) * damp + lap * speed) * 0.9995;
+        next[i] = v;
+      }
+    }
+    // 端は反射
+    for (var y2 = 0; y2 < N; y2++) {
+      next[y2 * N] = next[y2 * N + 1];
+      next[y2 * N + N - 1] = next[y2 * N + N - 2];
+    }
+    for (var x2 = 0; x2 < N; x2++) {
+      next[x2] = next[N + x2];
+      next[(N - 1) * N + x2] = next[(N - 2) * N + x2];
+    }
+    var t = prev;
+    prev = cur;
+    cur = next;
+    next = t;
+  }
+
+  function render() {
+    var data = img.data;
+    var p = 0;
+    var lx = 0.45, ly = -0.62, lz = 0.64;
+
+    for (var y = 0; y < N; y++) {
+      for (var x = 0; x < N; x++) {
+        var i = y * N + x;
+        var h = cur[i];
+        var hx = x > 0 && x < N - 1 ? cur[i + 1] - cur[i - 1] : 0;
+        var hy = y > 0 && y < N - 1 ? cur[i + N] - cur[i - N] : 0;
+
+        var nx = -hx * 14;
+        var ny = -hy * 14;
+        var nz = 1;
+        var inv = 1 / Math.sqrt(nx * nx + ny * ny + 1);
+        nx *= inv; ny *= inv; nz *= inv;
+
+        var diff = Math.max(0, nx * lx + ny * ly + nz * lz);
+        var spec = Math.pow(diff, 28);
+
+        var base = 0.10 + h * 1.6;
+        var r = 18 + 120 * base * 0.35 + 200 * spec;
+        var g = 46 + 150 * base * 0.6 + 220 * spec;
+        var b = 78 + 170 * base * 0.9 + 235 * spec;
+
+        data[p] = r > 255 ? 255 : r;
+        data[p + 1] = g > 255 ? 255 : g;
+        data[p + 2] = b > 255 ? 255 : b;
+        data[p + 3] = 255;
+        p += 4;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+
+  var frames = 0, fpsTimer = 0, smooth = 0;
+  var rainTimer = 0;
+
+  function loop(now) {
+    if (!fpsTimer) fpsTimer = now;
+    var t0 = performance.now();
+
+    if (rain) {
+      rainTimer++;
+      if (rainTimer % 3 === 0) {
+        drop(4 + Math.random() * (N - 8), 4 + Math.random() * (N - 8), amp * 0.7);
+      }
+    }
+
+    step();
+    render();
+    smooth = smooth * 0.92 + (performance.now() - t0) * 0.08;
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      msEl.textContent = smooth.toFixed(1) + " ms / " + N + "×" + N;
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  canvas.addEventListener("pointerdown", function (e) {
+    e.preventDefault();
+    var rect = canvas.getBoundingClientRect();
+    var x = (e.clientX - rect.left) / rect.width * N;
+    var y = (e.clientY - rect.top) / rect.height * N;
+    drop(x, y, amp);
+  });
+
+  canvas.addEventListener("pointermove", function (e) {
+    if (e.buttons !== 1) return;
+    var rect = canvas.getBoundingClientRect();
+    var x = (e.clientX - rect.left) / rect.width * N;
+    var y = (e.clientY - rect.top) / rect.height * N;
+    drop(x, y, amp * 0.35);
+  });
+
+  speedEl.addEventListener("input", function () { speed = Number(speedEl.value); speedVal.textContent = speed.toFixed(2); });
+  dampEl.addEventListener("input", function () { damp = Number(dampEl.value); dampVal.textContent = damp.toFixed(3); });
+  ampEl.addEventListener("input", function () { amp = Number(ampEl.value); ampVal.textContent = amp.toFixed(2); });
+
+  document.getElementById("drops").addEventListener("click", function () {
+    for (var i = 0; i < 5; i++) {
+      drop(30 + Math.random() * (N - 60), 30 + Math.random() * (N - 60), amp);
+    }
+  });
+
+  document.getElementById("rain").addEventListener("click", function () {
+    rain = !rain;
+    this.setAttribute("aria-pressed", rain ? "true" : "false");
+  });
+
+  document.getElementById("calm").addEventListener("click", function () {
+    cur.fill(0);
+    prev.fill(0);
+    next.fill(0);
+  });
+
+  // 最初に1滴
+  drop(N / 2, N / 2, 1.2);
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
