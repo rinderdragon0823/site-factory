@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>メタボール — 距離の和が、かたまりになる。</title>
+<meta name="description" content="2Dメタボールの技術デモ。各点からの距離の2乗の逆数を足し、しきい値を超えたところを塗るだけで、つながって溶け合う塊が描けます。">
+<meta property="og:title" content="メタボール — 距離の和が、かたまりになる。">
+<meta property="og:description" content="点の影響を足し合わせて、しきい値で切る。それだけで、ぷるぷる繋がる塊になります。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/metaballs/">
+<meta property="og:site_name" content="メタボール">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05060c">
+<style>
+  :root{
+    --bg:#05060c;
+    --panel:#0c1018;
+    --ink:#e9eefb;
+    --muted:rgba(233,238,251,.56);
+    --lime:#c6f36b;
+    --line:rgba(233,238,251,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #1b2a18 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #241430 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:680px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--lime);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.5rem,5.6vw,2rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{position:relative;margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#02030a;box-shadow:0 16px 40px rgba(0,0,0,.55);touch-action:none}
+  #field{display:block;width:100%;height:auto;cursor:crosshair}
+  .hint{position:absolute;left:10px;bottom:8px;font-size:10px;color:rgba(233,238,251,.5);pointer-events:none}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:96px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--lime);min-width:0;cursor:pointer}
+  .row output{width:58px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0c1018;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--lime)}
+  .actions button:focus-visible{outline:3px solid var(--lime);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,238,251,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">METABALLS</p>
+      <h1>メタボール</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms / 76,800 px</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="field" width="320" height="240" role="img" aria-label="メタボールの描画"></canvas>
+    <div class="hint">クリックで、そこに塊を足せます</div>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="count">ブロブ数</label><input id="count" type="range" min="2" max="14" step="1" value="8"><output id="countVal">8</output></div>
+    <div class="row"><label for="thresh">しきい値</label><input id="thresh" type="range" min="0.4" max="2.4" step="0.05" value="1.15"><output id="threshVal">1.15</output></div>
+    <div class="row"><label for="speed">速さ</label><input id="speed" type="range" min="0" max="2.5" step="0.1" value="0.9"><output id="speedVal">0.9</output></div>
+    <div class="row"><label for="size">粒の大きさ</label><input id="size" type="range" min="20" max="60" step="1" value="28"><output id="sizeVal">28</output></div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="color">色を変える</button>
+    <button type="button" id="reset">散らす</button>
+  </div>
+
+  <p class="note">
+    <b>各ブロブからの距離の2乗の逆数 r²/d² を、全ピクセルで足し合わせます</b>。合計がしきい値を超えた画素を塗るだけ。
+    近づくと和が重なって、塊がつながります。320×240の全画素を毎フレームCPUで計算しています。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 320, H = 240;
+  var canvas = document.getElementById("field");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var img = ctx.createImageData(W, H);
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var countEl = document.getElementById("count");
+  var threshEl = document.getElementById("thresh");
+  var speedEl = document.getElementById("speed");
+  var sizeEl = document.getElementById("size");
+  var countVal = document.getElementById("countVal");
+  var threshVal = document.getElementById("threshVal");
+  var speedVal = document.getElementById("speedVal");
+  var sizeVal = document.getElementById("sizeVal");
+
+  var MAX = 14;
+  var blobs = [];
+  var count = 8;
+  var threshold = 1.15;
+  var speed = 0.9;
+  var radius = 28;
+  var palette = 0;
+  var LUT = new Uint8Array(256 * 3);
+
+  function buildLut() {
+    for (var i = 0; i < 256; i++) {
+      var t = i / 255;
+      var r, g, b;
+      if (palette === 0) {
+        r = 0.10 + 0.90 * Math.pow(t, 2.2);
+        g = 0.35 + 0.65 * Math.pow(t, 0.9);
+        b = 0.55 + 0.45 * Math.pow(t, 3.0);
+      } else if (palette === 1) {
+        r = 0.95 * Math.pow(t, 0.6);
+        g = 0.25 + 0.65 * Math.pow(t, 1.6);
+        b = 0.55 + 0.35 * Math.pow(t, 2.4);
+      } else {
+        r = 0.35 + 0.65 * Math.pow(t, 2.6);
+        g = 0.55 + 0.45 * Math.pow(t, 0.7);
+        b = 0.25 + 0.55 * Math.pow(t, 1.8);
+      }
+      LUT[i * 3] = Math.max(0, Math.min(255, r * 255)) | 0;
+      LUT[i * 3 + 1] = Math.max(0, Math.min(255, g * 255)) | 0;
+      LUT[i * 3 + 2] = Math.max(0, Math.min(255, b * 255)) | 0;
+    }
+  }
+
+  function spawn() {
+    blobs = [];
+    for (var i = 0; i < MAX; i++) {
+      var a = Math.random() * 6.283;
+      blobs.push({
+        x: 40 + Math.random() * (W - 80),
+        y: 40 + Math.random() * (H - 80),
+        vx: Math.cos(a) * (0.4 + Math.random() * 0.7),
+        vy: Math.sin(a) * (0.4 + Math.random() * 0.7),
+        r: 0.8 + Math.random() * 0.5
+      });
+    }
+  }
+
+  function step() {
+    var r2 = radius * radius;
+    for (var i = 0; i < count; i++) {
+      var b = blobs[i];
+      b.x += b.vx * speed * 1.6;
+      b.y += b.vy * speed * 1.6;
+      var rr = radius * b.r * 0.5;
+      if (b.x < rr) { b.x = rr; b.vx = Math.abs(b.vx); }
+      if (b.x > W - rr) { b.x = W - rr; b.vx = -Math.abs(b.vx); }
+      if (b.y < rr) { b.y = rr; b.vy = Math.abs(b.vy); }
+      if (b.y > H - rr) { b.y = H - rr; b.vy = -Math.abs(b.vy); }
+      b.r2 = r2 * b.r * b.r;
+    }
+  }
+
+  function render() {
+    var data = img.data;
+    var p = 0;
+    var th = threshold;
+    for (var y = 0; y < H; y++) {
+      for (var x = 0; x < W; x++) {
+        var sum = 0;
+        for (var i = 0; i < count; i++) {
+          var b = blobs[i];
+          var dx = x - b.x;
+          var dy = y - b.y;
+          sum += b.r2 / (dx * dx + dy * dy + 1);
+        }
+        if (sum < th) {
+          data[p] = 4; data[p + 1] = 6; data[p + 2] = 12;
+        } else {
+          var v = Math.min(1, (sum - th) * 0.55);
+          var idx = (v * 255) | 0;
+          var o = idx * 3;
+          data[p] = LUT[o];
+          data[p + 1] = LUT[o + 1];
+          data[p + 2] = LUT[o + 2];
+        }
+        data[p + 3] = 255;
+        p += 4;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+
+  var frames = 0, fpsTimer = 0, smooth = 0;
+  function loop(now) {
+    if (!fpsTimer) fpsTimer = now;
+    var t0 = performance.now();
+    step();
+    render();
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      msEl.textContent = smooth.toFixed(1) + " ms / " + (W * H).toLocaleString("en-US") + " px";
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  countEl.addEventListener("input", function () {
+    count = Number(countEl.value);
+    countVal.textContent = String(count);
+  });
+  threshEl.addEventListener("input", function () {
+    threshold = Number(threshEl.value);
+    threshVal.textContent = threshold.toFixed(2);
+  });
+  speedEl.addEventListener("input", function () {
+    speed = Number(speedEl.value);
+    speedVal.textContent = speed.toFixed(1);
+  });
+  sizeEl.addEventListener("input", function () {
+    radius = Number(sizeEl.value);
+    sizeVal.textContent = String(radius);
+  });
+
+  document.getElementById("color").addEventListener("click", function () {
+    palette = (palette + 1) % 3;
+    buildLut();
+  });
+
+  document.getElementById("reset").addEventListener("click", spawn);
+
+  canvas.addEventListener("pointerdown", function (e) {
+    e.preventDefault();
+    var rect = canvas.getBoundingClientRect();
+    var x = (e.clientX - rect.left) / rect.width * W;
+    var y = (e.clientY - rect.top) / rect.height * H;
+    var b = blobs[Math.floor(Math.random() * MAX)];
+    b.x = x;
+    b.y = y;
+    if (count < MAX) {
+      count += 1;
+      countEl.value = String(count);
+      countVal.textContent = String(count);
+    }
+  });
+
+  spawn();
+  buildLut();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
