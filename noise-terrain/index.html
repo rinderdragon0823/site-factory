@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ノイズ地形 — 乱数が、山になる。</title>
+<meta name="description" content="バリューノイズを重ねて地形を描く技術デモ。オクターブを増やすほど細かい起伏が出て、海面を上げると島が沈みます。">
+<meta property="og:title" content="ノイズ地形 — 乱数が、山になる。">
+<meta property="og:description" content="乱数の格子をなめらかに補間して、何回か重ねる。それだけで地形らしくなります。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/noise-terrain/">
+<meta property="og:site_name" content="ノイズ地形">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --green:#86efac;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #10281e 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #101a2e 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:720px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--green);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.5rem,5.6vw,2rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{position:relative;margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#02040a;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+  #map{display:block;width:100%;height:auto;aspect-ratio:400/260}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:96px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--green);min-width:0;cursor:pointer}
+  .row output{width:60px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0c1119;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--green)}
+  .actions button:focus-visible{outline:3px solid var(--green);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">FRACTAL VALUE NOISE</p>
+      <h1>ノイズ地形</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms / 104,000 px</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="map" width="400" height="260" role="img" aria-label="ノイズから作った地形"></canvas>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="oct">オクターブ</label><input id="oct" type="range" min="1" max="6" step="1" value="4"><output id="octVal">4</output></div>
+    <div class="row"><label for="scale">地形の細かさ</label><input id="scale" type="range" min="0.010" max="0.090" step="0.002" value="0.034"><output id="scaleVal">0.034</output></div>
+    <div class="row"><label for="sea">海面</label><input id="sea" type="range" min="0.20" max="0.60" step="0.01" value="0.38"><output id="seaVal">0.38</output></div>
+    <div class="row"><label for="spd">流れる速さ</label><input id="spd" type="range" min="0" max="0.30" step="0.01" value="0.08"><output id="spdVal">0.08</output></div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="seed">別の地形</button>
+  </div>
+
+  <p class="note">
+    <b>乱数の格子を作って、なめらかに補間する（バリューノイズ）</b>。周波数を2倍にしながら振幅を半分にして重ねる（fBm）と、山と谷が入れ子になった地形になります。
+    等高線は高さを 1/24 に割った余りで暗くしているだけです。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 400, H = 260;
+  var canvas = document.getElementById("map");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var img = ctx.createImageData(W, H);
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var octEl = document.getElementById("oct");
+  var scaleEl = document.getElementById("scale");
+  var seaEl = document.getElementById("sea");
+  var spdEl = document.getElementById("spd");
+  var octVal = document.getElementById("octVal");
+  var scaleVal = document.getElementById("scaleVal");
+  var seaVal = document.getElementById("seaVal");
+  var spdVal = document.getElementById("spdVal");
+
+  var TABLE = 256;
+  var noise = new Float32Array(TABLE * TABLE);
+  var octaves = 4;
+  var scale = 0.034;
+  var sea = 0.38;
+  var speed = 0.08;
+  var offset = 0;
+
+  function reseed() {
+    for (var i = 0; i < noise.length; i++) noise[i] = Math.random();
+  }
+
+  function smooth(t) { return t * t * (3 - 2 * t); }
+
+  function sample(x, y) {
+    var xi = Math.floor(x), yi = Math.floor(y);
+    var xf = x - xi, yf = y - yi;
+    var x0 = xi & 255, x1 = (xi + 1) & 255;
+    var y0 = yi & 255, y1 = (yi + 1) & 255;
+    var a = noise[y0 * TABLE + x0];
+    var b = noise[y0 * TABLE + x1];
+    var c = noise[y1 * TABLE + x0];
+    var d = noise[y1 * TABLE + x1];
+    var u = smooth(xf), v = smooth(yf);
+    return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v;
+  }
+
+  function fbm(x, y) {
+    var total = 0, amp = 1, freq = 1, norm = 0;
+    for (var o = 0; o < octaves; o++) {
+      total += sample(x * freq, y * freq) * amp;
+      norm += amp;
+      amp *= 0.5;
+      freq *= 2;
+    }
+    return total / norm;
+  }
+
+  function color(h) {
+    var r, g, b;
+    if (h < sea) {
+      var d = (sea - h) / Math.max(0.001, sea);
+      r = 12 + 20 * (1 - d);
+      g = 40 + 70 * (1 - d);
+      b = 90 + 90 * (1 - d);
+    } else if (h < sea + 0.035) {
+      r = 214; g = 197; b = 140;
+    } else if (h < 0.62) {
+      var t = (h - sea) / (0.62 - sea);
+      r = 70 + 40 * t; g = 130 + 50 * t; b = 70 + 30 * t;
+    } else if (h < 0.78) {
+      var t2 = (h - 0.62) / 0.16;
+      r = 96 - 20 * t2; g = 110 - 30 * t2; b = 82 - 20 * t2;
+    } else {
+      var t3 = Math.min(1, (h - 0.78) / 0.18);
+      r = 150 + 100 * t3; g = 150 + 100 * t3; b = 158 + 95 * t3;
+    }
+    return [r, g, b];
+  }
+
+  function render() {
+    var data = img.data;
+    var p = 0;
+    var step = scale;
+    var seaLv = sea;
+
+    for (var y = 0; y < H; y++) {
+      var wy = (y + offset) * step;
+      for (var x = 0; x < W; x++) {
+        var h = fbm(x * step, wy);
+        var c = color(h);
+
+        // 等高線
+        var band = Math.abs((h * 24) % 1);
+        var lineDark = band < 0.06 ? 0.82 : 1;
+
+        data[p] = c[0] * lineDark;
+        data[p + 1] = c[1] * lineDark;
+        data[p + 2] = c[2] * lineDark;
+        data[p + 3] = 255;
+        p += 4;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+
+  var frames = 0, fpsTimer = 0, smoothMs = 0;
+  function loop(now) {
+    if (!fpsTimer) { fpsTimer = now; }
+    var dt = Math.min(0.05, (now - (loop.last || now)) / 1000);
+    loop.last = now;
+
+    var t0 = performance.now();
+    offset += speed * 60 * dt;
+    if (offset > 100000) offset = 0;
+    render();
+    smoothMs = smoothMs * 0.9 + (performance.now() - t0) * 0.1;
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      msEl.textContent = smoothMs.toFixed(1) + " ms / " + (W * H).toLocaleString("en-US") + " px";
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  octEl.addEventListener("input", function () { octaves = Number(octEl.value); octVal.textContent = String(octaves); });
+  scaleEl.addEventListener("input", function () { scale = Number(scaleEl.value); scaleVal.textContent = scale.toFixed(3); });
+  seaEl.addEventListener("input", function () { sea = Number(seaEl.value); seaVal.textContent = sea.toFixed(2); });
+  spdEl.addEventListener("input", function () { speed = Number(spdEl.value); spdVal.textContent = speed.toFixed(2); });
+
+  document.getElementById("seed").addEventListener("click", reseed);
+
+  reseed();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
