@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>二重振り子 — 0.0001 の差が、やがて全部になる。</title>
+<meta name="description" content="二重振り子のカオスを可視化。初期角度を0.0001ラジアンだけずらした振り子たちが、時間とともに別々の軌道へ分かれていきます。">
+<meta property="og:title" content="二重振り子 — 0.0001 の差が、やがて全部になる。">
+<meta property="og:description" content="ほとんど同じ条件から始めたのに、数秒後には全然ちがう動きに。カオスの入口を見る技術デモ。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/chaos-pendulum/">
+<meta property="og:site_name" content="二重振り子">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --amber:#fbbf24;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #2a2110 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #141a33 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:680px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--amber);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.4rem,5.2vw,1.9rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{position:relative;margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+  #view{display:block;width:100%;height:auto}
+
+  .presets{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  .presets button{
+    flex:1 1 0;font:inherit;font-size:11.5px;font-weight:800;
+    color:var(--muted);background:transparent;border:1.5px solid var(--line);border-radius:999px;
+    padding:9px 10px;min-height:38px;cursor:pointer;
+  }
+  .presets button:hover{color:var(--ink);border-color:var(--amber)}
+  .presets button[aria-pressed="true"]{background:var(--amber);color:#231a04;border-color:var(--amber)}
+  .presets button:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:92px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--amber);min-width:0;cursor:pointer}
+  .row output{width:58px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .readout{display:flex;gap:16px;flex-wrap:wrap;margin-top:6px;font-size:10.5px;color:var(--muted)}
+  .readout b{color:var(--ink);font-variant-numeric:tabular-nums;font-size:12.5px}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0c1119;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--amber)}
+  .actions button:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">DOUBLE PENDULUM / CHAOS</p>
+      <h1>二重振り子</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="steps">0 ステップ</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="view" width="640" height="520" role="img" aria-label="二重振り子の軌道"></canvas>
+  </div>
+
+  <div class="presets" role="group" aria-label="本数">
+    <button type="button" data-n="1" aria-pressed="false">1本</button>
+    <button type="button" data-n="8" aria-pressed="true">8本</button>
+    <button type="button" data-n="20" aria-pressed="false">20本</button>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="grav">重力</label><input id="grav" type="range" min="500" max="2400" step="20" value="1200"><output id="gravVal">1200</output></div>
+    <div class="row"><label for="damp">減衰</label><input id="damp" type="range" min="0" max="0.02" step="0.001" value="0"><output id="dampVal">0.000</output></div>
+    <div class="row"><label for="fade">残像</label><input id="fade" type="range" min="0.02" max="0.4" step="0.01" value="0.06"><output id="fadeVal">0.06</output></div>
+    <div class="readout">
+      <span>広がり <b id="spread">0</b> px</span>
+      <span>Δθ₀ <b>0.001 rad</b></span>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="reset">最初から</button>
+  </div>
+
+  <p class="note">
+    <b>ほぼ同じ初期条件から始めた二重振り子</b>を、RK4で積分しています。初期角度を 0.001 ラジアンだけずらすと、数秒後には別々の軌道に。
+    「広がり」は、いちばん端どうしのおもりの距離です。これが伸びていくのが、カオスの入口です。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 640, H = 520;
+  var canvas = document.getElementById("view");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var fpsEl = document.getElementById("fps");
+  var stepsEl = document.getElementById("steps");
+  var gravEl = document.getElementById("grav");
+  var dampEl = document.getElementById("damp");
+  var fadeEl = document.getElementById("fade");
+  var gravVal = document.getElementById("gravVal");
+  var dampVal = document.getElementById("dampVal");
+  var fadeVal = document.getElementById("fadeVal");
+  var spreadEl = document.getElementById("spread");
+
+  var PIVOT_X = W / 2, PIVOT_Y = 150;
+  var L1 = 150, L2 = 150;
+  var M1 = 1, M2 = 1;
+
+  var N = 8;
+  var pend = [];
+  var g = 1200;
+  var damp = 0;
+  var fade = 0.06;
+  var steps = 0;
+
+  function reset() {
+    pend = [];
+    var base1 = Math.PI / 2 + 0.2;
+    var base2 = Math.PI / 2 - 0.6;
+    for (var i = 0; i < N; i++) {
+      var off = i * 0.001;
+      pend.push({ t1: base1 + off, t2: base2 + off, w1: 0, w2: 0, hue: 30 + (i / Math.max(1, N - 1)) * 260 });
+    }
+    steps = 0;
+    ctx.fillStyle = "#03050a";
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  function deriv(t1, t2, w1, w2) {
+    var d = 2 * M1 + M2 - M2 * Math.cos(2 * t1 - 2 * t2);
+    var a1 = (-g * (2 * M1 + M2) * Math.sin(t1) - M2 * g * Math.sin(t1 - 2 * t2) - 2 * Math.sin(t1 - t2) * M2 * (w2 * w2 * L2 + w1 * w1 * L1 * Math.cos(t1 - t2))) / (L1 * d);
+    var a2 = (2 * Math.sin(t1 - t2) * (w1 * w1 * L1 * (M1 + M2) + g * (M1 + M2) * Math.cos(t1) + w2 * w2 * L2 * M2 * Math.cos(t1 - t2))) / (L2 * d);
+    return [w1, w2, a1, a2];
+  }
+
+  function stepOne(p, dt) {
+    var t1 = p.t1, t2 = p.t2, w1 = p.w1, w2 = p.w2;
+    var k1 = deriv(t1, t2, w1, w2);
+    var k2 = deriv(t1 + k1[0] * dt / 2, t2 + k1[1] * dt / 2, w1 + k1[2] * dt / 2, w2 + k1[3] * dt / 2);
+    var k3 = deriv(t1 + k2[0] * dt / 2, t2 + k2[1] * dt / 2, w1 + k2[2] * dt / 2, w2 + k2[3] * dt / 2);
+    var k4 = deriv(t1 + k3[0] * dt, t2 + k3[1] * dt, w1 + k3[2] * dt, w2 + k3[3] * dt);
+
+    p.t1 += (k1[0] + 2 * k2[0] + 2 * k3[0] + k4[0]) * dt / 6;
+    p.t2 += (k1[1] + 2 * k2[1] + 2 * k3[1] + k4[1]) * dt / 6;
+    p.w1 += (k1[2] + 2 * k2[2] + 2 * k3[2] + k4[2]) * dt / 6;
+    p.w2 += (k1[3] + 2 * k2[3] + 2 * k3[3] + k4[3]) * dt / 6;
+
+    if (damp > 0) {
+      p.w1 *= (1 - damp * dt * 60);
+      p.w2 *= (1 - damp * dt * 60);
+    }
+  }
+
+  function bob(p) {
+    var x1 = PIVOT_X + L1 * Math.sin(p.t1);
+    var y1 = PIVOT_Y + L1 * Math.cos(p.t1);
+    return {
+      x1: x1, y1: y1,
+      x2: x1 + L2 * Math.sin(p.t2),
+      y2: y1 + L2 * Math.cos(p.t2)
+    };
+  }
+
+  function draw() {
+    ctx.fillStyle = "rgba(3,5,10," + fade + ")";
+    ctx.fillRect(0, 0, W, H);
+
+    // 支点
+    ctx.fillStyle = "rgba(233,239,248,.55)";
+    ctx.fillRect(PIVOT_X - 14, PIVOT_Y - 2, 28, 4);
+
+    var first = null, last = null;
+
+    for (var i = 0; i < N; i++) {
+      var p = pend[i];
+      var b = bob(p);
+      if (i === 0) first = b;
+      last = b;
+
+      if (i === 0) {
+        ctx.strokeStyle = "rgba(233,239,248,.12)";
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(PIVOT_X, PIVOT_Y);
+        ctx.lineTo(b.x1, b.y1);
+        ctx.lineTo(b.x2, b.y2);
+        ctx.stroke();
+      }
+
+      ctx.fillStyle = "hsla(" + p.hue.toFixed(0) + ",85%,62%,.9)";
+      ctx.beginPath();
+      ctx.arc(b.x2, b.y2, 2.4, 0, 6.283);
+      ctx.fill();
+    }
+
+    if (first && last) {
+      var dx = last.x2 - first.x2;
+      var dy = last.y2 - first.y2;
+      spreadEl.textContent = Math.round(Math.hypot(dx, dy)).toString();
+    }
+  }
+
+  var lastT = 0, frames = 0, fpsTimer = 0;
+  function loop(now) {
+    if (!fpsTimer) { fpsTimer = now; lastT = now; }
+    var dtReal = Math.min(0.05, (now - lastT) / 1000);
+    lastT = now;
+
+    var sub = 8;
+    var dt = Math.min(0.006, dtReal / sub);
+    for (var s = 0; s < sub; s++) {
+      for (var i = 0; i < pend.length; i++) stepOne(pend[i], dt);
+      steps++;
+    }
+    draw();
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      stepsEl.textContent = steps.toLocaleString("en-US") + " ステップ";
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  document.querySelectorAll(".presets button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      N = Number(b.getAttribute("data-n"));
+      document.querySelectorAll(".presets button").forEach(function (x) {
+        x.setAttribute("aria-pressed", x === b ? "true" : "false");
+      });
+      reset();
+    });
+  });
+
+  gravEl.addEventListener("input", function () { g = Number(gravEl.value); gravVal.textContent = String(g); });
+  dampEl.addEventListener("input", function () { damp = Number(dampEl.value); dampVal.textContent = damp.toFixed(3); });
+  fadeEl.addEventListener("input", function () { fade = Number(fadeEl.value); fadeVal.textContent = fade.toFixed(2); });
+
+  document.getElementById("reset").addEventListener("click", reset);
+
+  reset();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
