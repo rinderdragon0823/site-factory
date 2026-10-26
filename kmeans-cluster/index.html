@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>k-means — 色分けは、重心が決める。</title>
+<meta name="description" content="k-means クラスタリングの可視化。点をいちばん近い重心に割り当てて、重心を平均に動かす。それだけを繰り返すと、色分けが決まります。">
+<meta property="og:title" content="k-means — 色分けは、重心が決める。">
+<meta property="og:description" content="割り当てて、平均を取る。2つの操作だけで、点の集まりが色分けされます。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/kmeans-cluster/">
+<meta property="og:site_name" content="k-means">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --cyan:#67e8f9;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #10283a 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #221430 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:680px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--cyan);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.5rem,5.6vw,2rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{position:relative;margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55);touch-action:none}
+  #plot{display:block;width:100%;height:auto;cursor:crosshair}
+  .hint{position:absolute;left:10px;bottom:8px;font-size:10px;color:rgba(233,239,248,.45);pointer-events:none}
+
+  .presets{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  .presets button{
+    flex:1 1 0;font:inherit;font-size:11.5px;font-weight:800;
+    color:var(--muted);background:transparent;border:1.5px solid var(--line);border-radius:999px;
+    padding:9px 10px;min-height:38px;cursor:pointer;
+  }
+  .presets button:hover{color:var(--ink);border-color:var(--cyan)}
+  .presets button[aria-pressed="true"]{background:var(--cyan);color:#04212a;border-color:var(--cyan)}
+  .presets button:focus-visible{outline:3px solid var(--cyan);outline-offset:2px}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:96px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--cyan);min-width:0;cursor:pointer}
+  .row output{width:58px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .readout{display:flex;gap:16px;flex-wrap:wrap;margin-top:6px;font-size:10.5px;color:var(--muted)}
+  .readout b{color:var(--ink);font-variant-numeric:tabular-nums;font-size:12.5px}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0c1119;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--cyan)}
+  .actions button[aria-pressed="true"]{background:var(--cyan);color:#04212a;border-color:var(--cyan)}
+  .actions button:focus-visible{outline:3px solid var(--cyan);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">K-MEANS / LLOYD'S ALGORITHM</p>
+      <h1>k-means</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="plot" width="640" height="440" role="img" aria-label="k-means クラスタリングの散布図"></canvas>
+    <div class="hint">クリックで点を追加できます</div>
+  </div>
+
+  <div class="presets" role="group" aria-label="点の配置">
+    <button type="button" data-p="blobs" aria-pressed="true">かたまり</button>
+    <button type="button" data-p="ring" aria-pressed="false">リング</button>
+    <button type="button" data-p="grid" aria-pressed="false">格子</button>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="k">クラスタ数 k</label><input id="k" type="range" min="2" max="8" step="1" value="4"><output id="kVal">4</output></div>
+    <div class="readout">
+      <span>反復 <b id="iterN">0</b></span>
+      <span>慣性（SSE）<b id="inertia">0</b></span>
+      <span>状態 <b id="state">—</b></span>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="auto" aria-pressed="true">自動で進む</button>
+    <button type="button" id="step">1回進む</button>
+    <button type="button" id="reset">やり直す</button>
+  </div>
+
+  <p class="note">
+    <b>① 各点をいちばん近い重心に割り当てる ② 重心をその集団の平均に動かす</b>。これを繰り返すだけ（Lloyd のアルゴリズム）。
+    慣性（SSE）は、点と重心の距離の2乗の合計。小さくなるほど、まとまった色分けになっています。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 640, H = 440;
+  var canvas = document.getElementById("plot");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var kEl = document.getElementById("k");
+  var kVal = document.getElementById("kVal");
+  var iterEl = document.getElementById("iterN");
+  var inertiaEl = document.getElementById("inertia");
+  var stateEl = document.getElementById("state");
+
+  var COLORS = ["#67e8f9", "#f9a8d4", "#fde68a", "#a7f3d0", "#c4b5fd", "#fdba74", "#93c5fd", "#fca5a5"];
+
+  var pts = [];
+  var cent = [];
+  var k = 4;
+  var iter = 0;
+  var inertia = 0;
+  var auto = true;
+  var lastIter = 0;
+
+  function makePoints(kind) {
+    pts = [];
+    var i;
+    if (kind === "ring") {
+      for (i = 0; i < 400; i++) {
+        var a = Math.random() * 6.283;
+        var r = 140 + (Math.random() - 0.5) * 26;
+        pts.push({ x: W / 2 + Math.cos(a) * r, y: H / 2 + Math.sin(a) * r, c: -1 });
+      }
+    } else if (kind === "grid") {
+      for (var gx = 0; gx < 20; gx++) {
+        for (var gy = 0; gy < 14; gy++) {
+          pts.push({ x: 40 + gx * 29 + (Math.random() - 0.5) * 6, y: 40 + gy * 27 + (Math.random() - 0.5) * 6, c: -1 });
+        }
+      }
+    } else {
+      var centers = [];
+      for (i = 0; i < 5; i++) {
+        centers.push({ x: 90 + Math.random() * (W - 180), y: 70 + Math.random() * (H - 140) });
+      }
+      for (i = 0; i < 400; i++) {
+        var c = centers[i % centers.length];
+        pts.push({
+          x: Math.max(8, Math.min(W - 8, c.x + (Math.random() - 0.5) * 130)),
+          y: Math.max(8, Math.min(H - 8, c.y + (Math.random() - 0.5) * 110)),
+          c: -1
+        });
+      }
+    }
+    resetClusters();
+  }
+
+  function resetClusters() {
+    cent = [];
+    for (var i = 0; i < k; i++) {
+      var p = pts[Math.floor(Math.random() * pts.length)];
+      cent.push({ x: p.x, y: p.y });
+    }
+    for (var j = 0; j < pts.length; j++) pts[j].c = -1;
+    iter = 0;
+    inertia = 0;
+    stateEl.textContent = "初期化";
+  }
+
+  function assign() {
+    var moved = 0;
+    for (var i = 0; i < pts.length; i++) {
+      var p = pts[i];
+      var best = 0;
+      var bd = Infinity;
+      for (var c = 0; c < cent.length; c++) {
+        var dx = p.x - cent[c].x;
+        var dy = p.y - cent[c].y;
+        var d2 = dx * dx + dy * dy;
+        if (d2 < bd) { bd = d2; best = c; }
+      }
+      if (p.c !== best) moved++;
+      p.c = best;
+      p.d2 = bd;
+    }
+    return moved;
+  }
+
+  function update() {
+    var sx = new Array(cent.length).fill(0);
+    var sy = new Array(cent.length).fill(0);
+    var cnt = new Array(cent.length).fill(0);
+    for (var i = 0; i < pts.length; i++) {
+      var p = pts[i];
+      sx[p.c] += p.x;
+      sy[p.c] += p.y;
+      cnt[p.c] += 1;
+    }
+    var shift = 0;
+    for (var c = 0; c < cent.length; c++) {
+      if (cnt[c] === 0) continue;
+      var nx = sx[c] / cnt[c];
+      var ny = sy[c] / cnt[c];
+      shift += Math.hypot(nx - cent[c].x, ny - cent[c].y);
+      cent[c].x = nx;
+      cent[c].y = ny;
+    }
+    return shift;
+  }
+
+  function computeInertia() {
+    var s = 0;
+    for (var i = 0; i < pts.length; i++) s += pts[i].d2 || 0;
+    inertia = s;
+    inertiaEl.textContent = Math.round(s).toLocaleString("en-US");
+  }
+
+  function stepOnce() {
+    assign();
+    computeInertia();
+    var shift = update();
+    assign();
+    computeInertia();
+    iter += 1;
+    iterEl.textContent = String(iter);
+    stateEl.textContent = shift < 0.5 ? "収束" : "更新中";
+    if (shift < 0.5) {
+      auto = false;
+      document.getElementById("auto").setAttribute("aria-pressed", "false");
+    }
+  }
+
+  function draw() {
+    ctx.fillStyle = "#03050a";
+    ctx.fillRect(0, 0, W, H);
+
+    // グリッド
+    ctx.strokeStyle = "rgba(233,239,248,.05)";
+    for (var gx = 0; gx < W; gx += 40) {
+      ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, H); ctx.stroke();
+    }
+    for (var gy = 0; gy < H; gy += 40) {
+      ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke();
+    }
+
+    for (var i = 0; i < pts.length; i++) {
+      var p = pts[i];
+      ctx.fillStyle = p.c >= 0 ? COLORS[p.c % COLORS.length] : "rgba(233,239,248,.5)";
+      ctx.globalAlpha = p.c >= 0 ? 0.85 : 0.5;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 3, 0, 6.283);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    for (var c = 0; c < cent.length; c++) {
+      var col = COLORS[c % COLORS.length];
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(cent[c].x, cent[c].y, 12, 0, 6.283);
+      ctx.stroke();
+      ctx.fillStyle = "#03050a";
+      ctx.beginPath();
+      ctx.arc(cent[c].x, cent[c].y, 9, 0, 6.283);
+      ctx.fill();
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.arc(cent[c].x, cent[c].y, 4, 0, 6.283);
+      ctx.fill();
+    }
+  }
+
+  var frames = 0, fpsTimer = 0, smooth = 0;
+  function loop(now) {
+    if (!fpsTimer) fpsTimer = now;
+    var t0 = performance.now();
+
+    if (auto && !lastIter) lastIter = now;
+    if (auto && now - lastIter > 550) {
+      stepOnce();
+      lastIter = now;
+    }
+    if (!auto) lastIter = 0;
+
+    draw();
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+    msEl.textContent = smooth.toFixed(2) + " ms";
+    renderCount++;
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  var renderCount = 0;
+
+  document.querySelectorAll(".presets button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      document.querySelectorAll(".presets button").forEach(function (x) {
+        x.setAttribute("aria-pressed", x === b ? "true" : "false");
+      });
+      makePoints(b.getAttribute("data-p"));
+      auto = true;
+      document.getElementById("auto").setAttribute("aria-pressed", "true");
+    });
+  });
+
+  kEl.addEventListener("input", function () {
+    k = Number(kEl.value);
+    kVal.textContent = String(k);
+    resetClusters();
+    auto = true;
+    document.getElementById("auto").setAttribute("aria-pressed", "true");
+  });
+
+  document.getElementById("auto").addEventListener("click", function () {
+    auto = !auto;
+    this.setAttribute("aria-pressed", auto ? "true" : "false");
+    lastIter = 0;
+  });
+  document.getElementById("step").addEventListener("click", stepOnce);
+  document.getElementById("reset").addEventListener("click", function () {
+    resetClusters();
+    auto = true;
+    document.getElementById("auto").setAttribute("aria-pressed", "true");
+  });
+
+  canvas.addEventListener("pointerdown", function (e) {
+    e.preventDefault();
+    var rect = canvas.getBoundingClientRect();
+    var x = (e.clientX - rect.left) / rect.width * W;
+    var y = (e.clientY - rect.top) / rect.height * H;
+    pts.push({ x: x, y: y, c: -1 });
+  });
+
+  makePoints("blobs");
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
