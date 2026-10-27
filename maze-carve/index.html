@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>迷路の掘り方 — 壁を、削って道にする。</title>
+<meta name="description" content="迷路生成アルゴリズムの可視化。穴掘り法とプリム法が、壁を1枚ずつ削って迷路を作っていく様子を見られます。">
+<meta property="og:title" content="迷路の掘り方 — 壁を、削って道にする。">
+<meta property="og:description" content="ランダムに壁を掘って、行き止まりまで戻る。それだけで迷路になります。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/maze-carve/">
+<meta property="og:site_name" content="迷路の掘り方">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --green:#86efac;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #10281e 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #141a33 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:700px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--green);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.4rem,5.2vw,1.9rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{position:relative;margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+  #maze{display:block;width:100%;height:auto}
+
+  .presets{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  .presets button{
+    flex:1 1 0;font:inherit;font-size:11.5px;font-weight:800;
+    color:var(--muted);background:transparent;border:1.5px solid var(--line);border-radius:999px;
+    padding:9px 10px;min-height:38px;cursor:pointer;
+  }
+  .presets button:hover{color:var(--ink);border-color:var(--green)}
+  .presets button[aria-pressed="true"]{background:var(--green);color:#08210f;border-color:var(--green)}
+  .presets button:focus-visible{outline:3px solid var(--green);outline-offset:2px}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:104px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--green);min-width:0;cursor:pointer}
+  .row output{width:64px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .readout{display:flex;gap:16px;flex-wrap:wrap;margin-top:6px;font-size:10.5px;color:var(--muted)}
+  .readout b{color:var(--ink);font-variant-numeric:tabular-nums;font-size:12.5px}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0c1119;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--green)}
+  .actions button:focus-visible{outline:3px solid var(--green);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">MAZE CARVING</p>
+      <h1>迷路の掘り方</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="maze" width="496" height="336" role="img" aria-label="掘られていく迷路"></canvas>
+  </div>
+
+  <div class="presets" role="group" aria-label="アルゴリズム">
+    <button type="button" data-a="back" aria-pressed="true">穴掘り法</button>
+    <button type="button" data-a="prim" aria-pressed="false">プリム法</button>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="speed">掘る速さ</label><input id="speed" type="range" min="1" max="40" step="1" value="1"><output id="speedVal">1</output></div>
+    <div class="readout">
+      <span>掘削 <b id="done">0%</b></span>
+      <span>通路 <b id="cells">0</b></span>
+      <span>状態 <b id="state">掘削中</b></span>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="again">もう一度</button>
+  </div>
+
+  <p class="note">
+    <b>穴掘り法</b>は、2マス先の未訪問セルへ進んで壁を1枚抜く、を繰り返し、行き止まりでは戻ります（深さ優先）。
+    <b>プリム法</b>は、掘った領域に接する壁をランダムに選んで広げます。どちらも壁を1枚ずつ削るだけです。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 31, H = 21, CELL = 16;
+  var canvas = document.getElementById("maze");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var doneEl = document.getElementById("done");
+  var cellsEl = document.getElementById("cells");
+  var stateEl = document.getElementById("state");
+  var speedEl = document.getElementById("speed");
+  var speedVal = document.getElementById("speedVal");
+
+  var walls = new Uint8Array(W * H);
+  var algo = "back";
+  var speed = 1;
+  var finished = false;
+  var carved = 0;
+  var head = -1;
+
+  var stack = [];
+  var frontier = [];
+  var cellCount = 0;
+
+  function idx(x, y) { return y * W + x; }
+
+  function reset() {
+    walls.fill(1);
+    carved = 0;
+    finished = false;
+    cellCount = ((W - 1) / 2) * ((H - 1) / 2);
+    head = idx(1, 1);
+    walls[head] = 0;
+    carved = 1;
+
+    if (algo === "back") {
+      stack = [[1, 1]];
+    } else {
+      frontier = [];
+      pushFrontier(1, 1);
+    }
+    stateEl.textContent = "掘削中";
+    updateReadout();
+  }
+
+  function pushFrontier(cx, cy) {
+    var dirs = [[2, 0], [-2, 0], [0, 2], [0, -2]];
+    for (var i = 0; i < dirs.length; i++) {
+      var nx = cx + dirs[i][0];
+      var ny = cy + dirs[i][1];
+      if (nx > 0 && ny > 0 && nx < W - 1 && ny < H - 1 && walls[idx(nx, ny)] === 1) {
+        frontier.push([nx, ny, cx, cy]);
+      }
+    }
+  }
+
+  function stepBack() {
+    if (stack.length === 0) { finished = true; return; }
+    var cur = stack[stack.length - 1];
+    var cx = cur[0], cy = cur[1];
+    head = idx(cx, cy);
+
+    var dirs = [[2, 0], [-2, 0], [0, 2], [0, -2]];
+    for (var i = dirs.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = dirs[i]; dirs[i] = dirs[j]; dirs[j] = t;
+    }
+
+    for (var d = 0; d < 4; d++) {
+      var nx = cx + dirs[d][0];
+      var ny = cy + dirs[d][1];
+      if (nx > 0 && ny > 0 && nx < W - 1 && ny < H - 1 && walls[idx(nx, ny)] === 1) {
+        walls[idx(cx + dirs[d][0] / 2, cy + dirs[d][1] / 2)] = 0;
+        walls[idx(nx, ny)] = 0;
+        carved += 1;
+        stack.push([nx, ny]);
+        head = idx(nx, ny);
+        return;
+      }
+    }
+    stack.pop();
+  }
+
+  function stepPrim() {
+    if (frontier.length === 0) { finished = true; return; }
+    var k = Math.floor(Math.random() * frontier.length);
+    var f = frontier.splice(k, 1)[0];
+    var nx = f[0], ny = f[1], px = f[2], py = f[3];
+    if (walls[idx(nx, ny)] === 0) return;
+
+    walls[idx((nx + px) / 2, (ny + py) / 2)] = 0;
+    walls[idx(nx, ny)] = 0;
+    carved += 1;
+    head = idx(nx, ny);
+    pushFrontier(nx, ny);
+  }
+
+  function updateReadout() {
+    var pct = Math.min(100, Math.round(carved / cellCount * 100));
+    doneEl.textContent = pct + "%";
+    cellsEl.textContent = String(carved);
+    if (finished) stateEl.textContent = "完成";
+  }
+
+  function draw() {
+    ctx.fillStyle = "#03050a";
+    ctx.fillRect(0, 0, W * CELL, H * CELL);
+
+    for (var y = 0; y < H; y++) {
+      for (var x = 0; x < W; x++) {
+        var i = idx(x, y);
+        if (walls[i]) {
+          ctx.fillStyle = "#233246";
+        } else {
+          ctx.fillStyle = "#0a1018";
+        }
+        ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
+      }
+    }
+
+    if (head >= 0) {
+      var hx = head % W;
+      var hy = (head / W) | 0;
+      ctx.fillStyle = finished ? "#86efac" : "#fbbf24";
+      ctx.fillRect(hx * CELL + 3, hy * CELL + 3, CELL - 7, CELL - 7);
+    }
+  }
+
+  var frames = 0, fpsTimer = 0, smooth = 0;
+  function loop(now) {
+    if (!fpsTimer) fpsTimer = now;
+    var t0 = performance.now();
+
+    if (!finished) {
+      for (var n = 0; n < speed && !finished; n++) {
+        if (algo === "back") stepBack(); else stepPrim();
+      }
+      updateReadout();
+    }
+    draw();
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      msEl.textContent = smooth.toFixed(2) + " ms";
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  document.querySelectorAll(".presets button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      algo = b.getAttribute("data-a");
+      document.querySelectorAll(".presets button").forEach(function (x) {
+        x.setAttribute("aria-pressed", x === b ? "true" : "false");
+      });
+      reset();
+    });
+  });
+
+  speedEl.addEventListener("input", function () {
+    speed = Number(speedEl.value);
+    speedVal.textContent = String(speed);
+  });
+
+  document.getElementById("again").addEventListener("click", reset);
+
+  reset();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
