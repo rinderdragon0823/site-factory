@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>粒子流体 — 押し合う粒が、水になる。</title>
+<meta name="description" content="粒子法（SPH系）の流体シミュレーション。粒同士が近づくと反発し、遠いと引かれ合う。それだけで水の塊になります。">
+<meta property="og:title" content="粒子流体 — 押し合う粒が、水になる。">
+<meta property="og:description" content="密度が高すぎると押し返す。近すぎる粒同士を引き離す。それだけで流れになります。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/sph-fluid/">
+<meta property="og:site_name" content="粒子流体">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#04070d">
+<style>
+  :root{
+    --bg:#04070d;
+    --panel:#0b1119;
+    --ink:#e9f2fb;
+    --muted:rgba(233,242,251,.56);
+    --blue:#7dd3fc;
+    --line:rgba(233,242,251,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #0c2740 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #101a33 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:700px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--blue);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.5rem,5.6vw,2rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{position:relative;margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03060b;box-shadow:0 16px 40px rgba(0,0,0,.55);touch-action:none}
+  #fluid{display:block;width:100%;height:auto;cursor:crosshair}
+  .hint{position:absolute;left:10px;bottom:8px;font-size:10px;color:rgba(233,242,251,.45);pointer-events:none}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:104px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--blue);min-width:0;cursor:pointer}
+  .row output{width:62px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0b1119;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--blue)}
+  .actions button:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,242,251,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">PARTICLE FLUID</p>
+      <h1>粒子流体</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms / 500 粒子</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="fluid" width="600" height="440" role="img" aria-label="粒子の流体シミュレーション"></canvas>
+    <div class="hint">ドラッグで水をかき混ぜられます</div>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="grav">重力</label><input id="grav" type="range" min="0" max="1200" step="20" value="700"><output id="gravVal">700</output></div>
+    <div class="row"><label for="stiff">押し返す強さ</label><input id="stiff" type="range" min="0.001" max="0.020" step="0.001" value="0.004"><output id="stiffVal">0.004</output></div>
+    <div class="row"><label for="visc">粘り</label><input id="visc" type="range" min="0" max="1" step="0.02" value="0.06"><output id="viscVal">0.06</output></div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="reset">水を入れ直す</button>
+  </div>
+
+  <p class="note">
+    <b>粒が近いほど「密度」が上がり、高すぎると押し返す力が出る</b>（SPH の考え方）。さらに近すぎる粒同士を引き離す項を足すと、
+    水らしく広がって、流れて、溜まります。近傍探索は格子で近くの粒だけ見ています。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 600, H = 440;
+  var canvas = document.getElementById("fluid");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var gravEl = document.getElementById("grav");
+  var stiffEl = document.getElementById("stiff");
+  var viscEl = document.getElementById("visc");
+  var gravVal = document.getElementById("gravVal");
+  var stiffVal = document.getElementById("stiffVal");
+  var viscVal = document.getElementById("viscVal");
+
+  var MAX = 1100;
+  var N = 900;
+  var H_R = 18;          // 影響半径
+  var RHO0 = 8;          // 基準密度
+
+  var px = new Float32Array(MAX), py = new Float32Array(MAX);
+  var vx = new Float32Array(MAX), vy = new Float32Array(MAX);
+  var dx = new Float32Array(MAX), dy = new Float32Array(MAX);
+
+  var gravity = 700;
+  var k = 0.004;
+  var knear = 0.006;
+  var visc = 0.06;
+  var dt = 1 / 60;
+
+  var GX = Math.ceil(W / H_R) + 1;
+  var GY = Math.ceil(H / H_R) + 1;
+  var cellHead = new Int32Array(GX * GY);
+  var cellNext = new Int32Array(MAX);
+
+  var dragX = -1, dragY = -1, dragging = false;
+
+  function reset() {
+    N = 900;
+    for (var i = 0; i < N; i++) {
+      px[i] = 70 + Math.random() * 200;
+      py[i] = 40 + Math.random() * 200;
+      vx[i] = 0;
+      vy[i] = 0;
+    }
+    ctx.fillStyle = "#03060b";
+    ctx.fillRect(0, 0, W, H);
+    calibrate();
+  }
+
+  function calibrate() {
+    var total = 0;
+    for (var i = 0; i < N; i++) {
+      var d = 0;
+      for (var j = 0; j < N; j++) {
+        if (i === j) continue;
+        var qx = px[j] - px[i];
+        var qy = py[j] - py[i];
+        var r2 = qx * qx + qy * qy;
+        if (r2 < H_R * H_R) {
+          var a = 1 - Math.sqrt(r2) / H_R;
+          d += a * a;
+        }
+      }
+      total += d;
+    }
+    var mean = total / Math.max(1, N);
+    RHO0 = Math.max(0.4, mean * 0.95);
+  }
+
+  function buildGrid() {
+    cellHead.fill(-1);
+    for (var i = 0; i < N; i++) {
+      var cx = (px[i] / H_R) | 0;
+      var cy = (py[i] / H_R) | 0;
+      if (cx < 0) cx = 0; else if (cx >= GX) cx = GX - 1;
+      if (cy < 0) cy = 0; else if (cy >= GY) cy = GY - 1;
+      var ci = cy * GX + cx;
+      cellNext[i] = cellHead[ci];
+      cellHead[ci] = i;
+    }
+  }
+
+  function step() {
+    buildGrid();
+    var h2 = H_R;
+    var density = new Float32Array(N);
+    var densityNear = new Float32Array(N);
+
+    // 密度と近傍密度
+    for (var i = 0; i < N; i++) {
+      var cx = (px[i] / H_R) | 0;
+      var cy = (py[i] / H_R) | 0;
+      var d = 0, dn = 0;
+      for (var gy = cy - 1; gy <= cy + 1; gy++) {
+        if (gy < 0 || gy >= GY) continue;
+        for (var gx = cx - 1; gx <= cx + 1; gx++) {
+          if (gx < 0 || gx >= GX) continue;
+          var j = cellHead[gy * GX + gx];
+          while (j !== -1) {
+            var qx = px[j] - px[i];
+            var qy = py[j] - py[i];
+            var r2 = qx * qx + qy * qy;
+            if (r2 < h2 * h2) {
+              var r = Math.sqrt(r2);
+              var a = 1 - r / h2;
+              d += a * a;
+              dn += a * a * a;
+            }
+            j = cellNext[j];
+          }
+        }
+      }
+      density[i] = d;
+      densityNear[i] = dn;
+    }
+
+    // 変位
+    var dispX = new Float32Array(N);
+    var dispY = new Float32Array(N);
+
+    for (var a1 = 0; a1 < N; a1++) {
+      var cx2 = (px[a1] / H_R) | 0;
+      var cy2 = (py[a1] / H_R) | 0;
+      for (var gy2 = cy2 - 1; gy2 <= cy2 + 1; gy2++) {
+        if (gy2 < 0 || gy2 >= GY) continue;
+        for (var gx2 = cx2 - 1; gx2 <= cx2 + 1; gx2++) {
+          if (gx2 < 0 || gx2 >= GX) continue;
+          var b = cellHead[gy2 * GX + gx2];
+          while (b !== -1) {
+            if (b > a1) {
+              var ddx = px[b] - px[a1];
+              var ddy = py[b] - py[a1];
+              var rr2 = ddx * ddx + ddy * ddy;
+              if (rr2 < h2 * h2 && rr2 > 0.0001) {
+                var rr = Math.sqrt(rr2);
+                var ux = ddx / rr;
+                var uy = ddy / rr;
+                var q = 1 - rr / h2;
+                var press = k * (density[a1] + density[b] - 2 * RHO0);
+                if (press < 0) press = 0;
+                var pressNear = knear * (densityNear[a1] + densityNear[b]);
+                var force = press * q + pressNear * q * q;
+                var fx = ux * force * 0.5;
+                var fy = uy * force * 0.5;
+                dispX[a1] -= fx; dispY[a1] -= fy;
+                dispX[b] += fx; dispY[b] += fy;
+
+                // 粘性（速度を近づける）
+                var rvx = vx[b] - vx[a1];
+                var rvy = vy[b] - vy[a1];
+                var vf = visc * q * 0.5;
+                vx[a1] += rvx * vf; vy[a1] += rvy * vf;
+                vx[b] -= rvx * vf; vy[b] -= rvy * vf;
+              }
+            }
+            b = cellNext[b];
+          }
+        }
+      }
+    }
+
+    // 積分
+    for (var i2 = 0; i2 < N; i2++) {
+      // 位置を直接補正（Clavet の double density relaxation）
+      var ddxp = Math.max(-3, Math.min(3, dispX[i2]));
+      var ddyp = Math.max(-3, Math.min(3, dispY[i2]));
+      px[i2] += ddxp;
+      py[i2] += ddyp;
+      vy[i2] += gravity * dt;
+      vx[i2] *= 0.995;
+      vy[i2] *= 0.995;
+
+      // 速度の上限
+      var sp = Math.hypot(vx[i2], vy[i2]);
+      if (sp > 900) { vx[i2] = vx[i2] / sp * 900; vy[i2] = vy[i2] / sp * 900; }
+
+      px[i2] += vx[i2] * dt;
+      py[i2] += vy[i2] * dt;
+
+      // 壁
+      var rr3 = 4;
+      if (px[i2] < rr3) { px[i2] = rr3; vx[i2] *= -0.4; }
+      if (px[i2] > W - rr3) { px[i2] = W - rr3; vx[i2] *= -0.4; }
+      if (py[i2] < rr3) { py[i2] = rr3; vy[i2] *= -0.4; }
+      if (py[i2] > H - rr3) { py[i2] = H - rr3; vy[i2] *= -0.4; }
+
+      // ドラッグでかき混ぜ
+      if (dragging) {
+        var ddx2 = px[i2] - dragX;
+        var ddy2 = py[i2] - dragY;
+        var d2 = ddx2 * ddx2 + ddy2 * ddy2;
+        if (d2 < 3600) {
+          vx[i2] += ddx2 * 0.6;
+          vy[i2] += ddy2 * 0.6;
+        }
+      }
+    }
+  }
+
+  function draw() {
+    ctx.fillStyle = "rgba(3,6,11,.30)";
+    ctx.fillRect(0, 0, W, H);
+
+    for (var i = 0; i < N; i++) {
+      var sp = Math.hypot(vx[i], vy[i]);
+      var t = Math.min(1, sp / 420);
+      var hue = 195 + t * 60;
+      ctx.fillStyle = "hsla(" + hue.toFixed(0) + ",85%," + (58 + t * 22).toFixed(0) + "%,.9)";
+      ctx.beginPath();
+      ctx.arc(px[i], py[i], 4, 0, 6.283);
+      ctx.fill();
+    }
+  }
+
+  var last = 0, frames = 0, fpsTimer = 0, smooth = 0;
+  function loop(now) {
+    if (!fpsTimer) { fpsTimer = now; last = now; }
+    last = now;
+
+    var t0 = performance.now();
+    step();
+    draw();
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      msEl.textContent = smooth.toFixed(1) + " ms / " + N + " 粒子";
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  function localPos(e) {
+    var rect = canvas.getBoundingClientRect();
+    return {
+      x: (e.clientX - rect.left) / rect.width * W,
+      y: (e.clientY - rect.top) / rect.height * H
+    };
+  }
+
+  canvas.addEventListener("pointerdown", function (e) {
+    e.preventDefault();
+    dragging = true;
+    var p = localPos(e);
+    dragX = p.x; dragY = p.y;
+  });
+  canvas.addEventListener("pointermove", function (e) {
+    if (!dragging) return;
+    var p = localPos(e);
+    dragX = p.x; dragY = p.y;
+  });
+  function end() { dragging = false; }
+  canvas.addEventListener("pointerup", end);
+  canvas.addEventListener("pointercancel", end);
+  canvas.addEventListener("pointerleave", end);
+
+  gravEl.addEventListener("input", function () { gravity = Number(gravEl.value); gravVal.textContent = String(gravity); });
+  stiffEl.addEventListener("input", function () { k = Number(stiffEl.value); stiffVal.textContent = k.toFixed(4); });
+  viscEl.addEventListener("input", function () { visc = Number(viscEl.value); viscVal.textContent = visc.toFixed(2); });
+
+  document.getElementById("reset").addEventListener("click", reset);
+
+  reset();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
