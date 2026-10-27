@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>画像フィルタ — となりの画素と、計算する。</title>
+<meta name="description" content="畳み込みフィルタの可視化。グレー・ぼかし・エッジ・エンボス・ポスタライズを、1画素ずつCPUで処理して左の元画像と比べられます。">
+<meta property="og:title" content="画像フィルタ — となりの画素と、計算する。">
+<meta property="og:description" content="3×3の重みを掛けて足す。それだけで、輪郭が出たりぼけたりします。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/image-filters/">
+<meta property="og:site_name" content="画像フィルタ">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --lilac:#c4b5fd;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #1e1836 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #101f2e 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:760px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--lilac);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.4rem,5.2vw,1.9rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+  .pair{display:flex;gap:2px}
+  .pair canvas{display:block;width:50%;height:auto;background:#000}
+  .labels{display:flex;justify-content:space-between;padding:6px 10px;font-size:10px;color:var(--muted);letter-spacing:.12em}
+
+  .presets{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  .presets button{
+    flex:1 1 0;font:inherit;font-size:11px;font-weight:800;
+    color:var(--muted);background:transparent;border:1.5px solid var(--line);border-radius:999px;
+    padding:8px 6px;min-height:36px;cursor:pointer;
+  }
+  .presets button:hover{color:var(--ink);border-color:var(--lilac)}
+  .presets button[aria-pressed="true"]{background:var(--lilac);color:#1a1330;border-color:var(--lilac)}
+  .presets button:focus-visible{outline:3px solid var(--lilac);outline-offset:2px}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:100px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--lilac);min-width:0;cursor:pointer}
+  .row output{width:62px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">CONVOLUTION</p>
+      <h1>画像フィルタ</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms / 76,800 px</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="pair">
+      <canvas id="orig" width="320" height="240" role="img" aria-label="元の画像"></canvas>
+      <canvas id="out" width="320" height="240" role="img" aria-label="フィルタ後の画像"></canvas>
+    </div>
+    <div class="labels"><span>ORIGINAL</span><span>FILTERED</span></div>
+  </div>
+
+  <div class="presets" role="group" aria-label="フィルタ">
+    <button type="button" data-f="none" aria-pressed="true">なし</button>
+    <button type="button" data-f="gray" aria-pressed="false">グレー</button>
+    <button type="button" data-f="blur" aria-pressed="false">ぼかし</button>
+    <button type="button" data-f="sobel" aria-pressed="false">エッジ</button>
+    <button type="button" data-f="emboss" aria-pressed="false">エンボス</button>
+    <button type="button" data-f="poster" aria-pressed="false">ポスタ</button>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="mix">強さ</label><input id="mix" type="range" min="0" max="1" step="0.05" value="1"><output id="mixVal">1.00</output></div>
+    <div class="row"><label for="thresh">しきい値</label><input id="thresh" type="range" min="0" max="200" step="5" value="60"><output id="threshVal">60</output></div>
+    <div class="row"><label for="levels">ポスタ段数</label><input id="levels" type="range" min="2" max="8" step="1" value="4"><output id="levelsVal">4</output></div>
+  </div>
+
+  <p class="note">
+    <b>各画素のまわり3×3に重みを掛けて足す（畳み込み）</b>。ぼかしは平均、エッジは左右・上下の差、エンボスは斜めの差。
+    320×240＝76,800画素を毎フレームCPUで処理しています。左が元、右がフィルタ後です。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 320, H = 240;
+  var orig = document.getElementById("orig");
+  var out = document.getElementById("out");
+  var octx = orig.getContext("2d");
+  var fctx = out.getContext("2d");
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var mixEl = document.getElementById("mix");
+  var threshEl = document.getElementById("thresh");
+  var levelsEl = document.getElementById("levels");
+  var mixVal = document.getElementById("mixVal");
+  var threshVal = document.getElementById("threshVal");
+  var levelsVal = document.getElementById("levelsVal");
+
+  var src = null;
+  var outImg = fctx.createImageData(W, H);
+  var filter = "none";
+  var mix = 1;
+  var thresh = 60;
+  var levels = 4;
+
+  function makeScene() {
+    // 空
+    var sky = octx.createLinearGradient(0, 0, 0, H * 0.62);
+    sky.addColorStop(0, "#1b2f5e");
+    sky.addColorStop(0.55, "#7b4b7a");
+    sky.addColorStop(1, "#f0a76a");
+    octx.fillStyle = sky;
+    octx.fillRect(0, 0, W, H * 0.62);
+
+    // 太陽
+    octx.fillStyle = "#ffd9a0";
+    octx.beginPath();
+    octx.arc(W * 0.68, H * 0.45, 26, 0, 6.283);
+    octx.fill();
+
+    // 山
+    function ridge(baseY, color, amp, step) {
+      octx.fillStyle = color;
+      octx.beginPath();
+      octx.moveTo(0, H);
+      for (var x = 0; x <= W; x += step) {
+        var y = baseY + Math.sin(x * 0.021 + baseY) * amp + Math.sin(x * 0.007) * amp * 0.7;
+        octx.lineTo(x, y);
+      }
+      octx.lineTo(W, H);
+      octx.closePath();
+      octx.fill();
+    }
+    ridge(H * 0.58, "#553a63", 22, 5);
+    ridge(H * 0.66, "#3a2b4c", 16, 4);
+    ridge(H * 0.74, "#241a33", 10, 3);
+
+    // 水面
+    var water = octx.createLinearGradient(0, H * 0.78, 0, H);
+    water.addColorStop(0, "#2a2140");
+    water.addColorStop(1, "#0d1020");
+    octx.fillStyle = water;
+    octx.fillRect(0, H * 0.78, W, H * 0.22);
+
+    // 反射
+    octx.globalAlpha = 0.25;
+    for (var i = 0; i < 40; i++) {
+      var y = H * 0.79 + Math.random() * H * 0.2;
+      var w = 6 + Math.random() * 30;
+      octx.fillStyle = "#ffd9a0";
+      octx.fillRect(W * 0.68 - w / 2 + (Math.random() - 0.5) * 20, y, w, 1);
+    }
+    octx.globalAlpha = 1;
+
+    // 星
+    for (var s = 0; s < 120; s++) {
+      octx.fillStyle = "rgba(255,255,255," + (0.2 + Math.random() * 0.6).toFixed(2) + ")";
+      octx.fillRect(Math.random() * W, Math.random() * H * 0.4, 1, 1);
+    }
+
+    src = octx.getImageData(0, 0, W, H);
+  }
+
+  function idx(x, y) { return (y * W + x) * 4; }
+
+  function get(data, x, y, c) {
+    if (x < 0) x = 0; else if (x >= W) x = W - 1;
+    if (y < 0) y = 0; else if (y >= H) y = H - 1;
+    return data[idx(x, y) + c];
+  }
+
+  function apply() {
+    var d = src.data;
+    var o = outImg.data;
+
+    for (var y = 0; y < H; y++) {
+      for (var x = 0; x < W; x++) {
+        var i = idx(x, y);
+        var r = d[i], g = d[i + 1], b = d[i + 2];
+
+        if (filter === "none") {
+          o[i] = r; o[i + 1] = g; o[i + 2] = b;
+        } else if (filter === "gray") {
+          var lum = 0.299 * r + 0.587 * g + 0.114 * b;
+          o[i] = r + (lum - r) * mix;
+          o[i + 1] = g + (lum - g) * mix;
+          o[i + 2] = b + (lum - b) * mix;
+        } else if (filter === "blur") {
+          var sr = 0, sg = 0, sb = 0, n = 0;
+          for (var dy = -1; dy <= 1; dy++) {
+            for (var dx = -1; dx <= 1; dx++) {
+              var j = idx(Math.min(W - 1, Math.max(0, x + dx)), Math.min(H - 1, Math.max(0, y + dy)));
+              sr += d[j]; sg += d[j + 1]; sb += d[j + 2]; n++;
+            }
+          }
+          o[i] = r + (sr / n - r) * mix;
+          o[i + 1] = g + (sg / n - g) * mix;
+          o[i + 2] = b + (sb / n - b) * mix;
+        } else if (filter === "sobel") {
+          var gx = -get(d, x - 1, y - 1, 0) - 2 * get(d, x - 1, y, 0) - get(d, x - 1, y + 1, 0)
+                 + get(d, x + 1, y - 1, 0) + 2 * get(d, x + 1, y, 0) + get(d, x + 1, y + 1, 0);
+          var gy = -get(d, x - 1, y - 1, 0) - 2 * get(d, x, y - 1, 0) - get(d, x + 1, y - 1, 0)
+                 + get(d, x - 1, y + 1, 0) + 2 * get(d, x, y + 1, 0) + get(d, x + 1, y + 1, 0);
+          var mag = Math.sqrt(gx * gx + gy * gy);
+          var v = mag > thresh ? Math.min(255, mag) : 0;
+          o[i] = r + (v - r) * mix;
+          o[i + 1] = g + (v - g) * mix;
+          o[i + 2] = b + (v - b) * mix;
+        } else if (filter === "emboss") {
+          var e = -2 * get(d, x - 1, y - 1, 0) - get(d, x, y - 1, 0) - get(d, x - 1, y, 0)
+                + get(d, x, y, 0) + get(d, x + 1, y, 0) + get(d, x, y + 1, 0) + 2 * get(d, x + 1, y + 1, 0);
+          e = Math.max(0, Math.min(255, e + 128));
+          o[i] = r + (e - r) * mix;
+          o[i + 1] = g + (e - g) * mix;
+          o[i + 2] = b + (e - b) * mix;
+        } else {
+          var step = 255 / (levels - 1);
+          o[i] = r + (Math.round(r / step) * step - r) * mix;
+          o[i + 1] = g + (Math.round(g / step) * step - g) * mix;
+          o[i + 2] = b + (Math.round(b / step) * step - b) * mix;
+        }
+        o[i + 3] = 255;
+      }
+    }
+    fctx.putImageData(outImg, 0, 0);
+  }
+
+  var frames = 0, fpsTimer = 0, smooth = 0, dirty = true;
+  function loop(now) {
+    if (!fpsTimer) fpsTimer = now;
+
+    var t0 = performance.now();
+    if (dirty) {
+      apply();
+      dirty = false;
+    }
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      msEl.textContent = smooth.toFixed(2) + " ms / " + (W * H).toLocaleString("en-US") + " px";
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  document.querySelectorAll(".presets button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      filter = b.getAttribute("data-f");
+      document.querySelectorAll(".presets button").forEach(function (x) {
+        x.setAttribute("aria-pressed", x === b ? "true" : "false");
+      });
+      dirty = true;
+    });
+  });
+
+  mixEl.addEventListener("input", function () { mix = Number(mixEl.value); mixVal.textContent = mix.toFixed(2); dirty = true; });
+  threshEl.addEventListener("input", function () { thresh = Number(threshEl.value); threshVal.textContent = String(thresh); dirty = true; });
+  levelsEl.addEventListener("input", function () { levels = Number(levelsEl.value); levelsVal.textContent = String(levels); dirty = true; });
+
+  makeScene();
+  octx.putImageData(src, 0, 0);
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
