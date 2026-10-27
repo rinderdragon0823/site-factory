@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>流れ場 — 渦は、ノイズから生まれる。</title>
+<meta name="description" content="カールノイズの流れ場を可視化。800個の粒子が渦を描いて流れ、残像が模様になります。スケールや速さを動かせます。">
+<meta property="og:title" content="流れ場 — 渦は、ノイズから生まれる。">
+<meta property="og:description" content="ノイズの傾きを90度回すと、湧き出しのない流れになる。粒子を流すと渦が現れます。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/curl-flow/">
+<meta property="og:site_name" content="流れ場">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#04060c">
+<style>
+  :root{
+    --bg:#04060c;
+    --panel:#0b1018;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --teal:#5eead4;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #0d2a33 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #1a1430 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:720px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--teal);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.5rem,5.6vw,2rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{position:relative;margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+  #field{display:block;width:100%;height:auto}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:96px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--teal);min-width:0;cursor:pointer}
+  .row output{width:64px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0b1018;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--teal)}
+  .actions button:focus-visible{outline:3px solid var(--teal);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">CURL NOISE</p>
+      <h1>流れ場</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms / 800 粒子</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="field" width="640" height="460" role="img" aria-label="粒子が描く流れの模様"></canvas>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="scale">渦の大きさ</label><input id="scale" type="range" min="0.0030" max="0.0200" step="0.0005" value="0.0080"><output id="scaleVal">0.0080</output></div>
+    <div class="row"><label for="speed">流れる速さ</label><input id="speed" type="range" min="0.5" max="4.0" step="0.1" value="1.6"><output id="speedVal">1.6</output></div>
+    <div class="row"><label for="count">粒子数</label><input id="count" type="range" min="200" max="1500" step="50" value="800"><output id="countVal">800</output></div>
+    <div class="row"><label for="fade">残像</label><input id="fade" type="range" min="0.02" max="0.20" step="0.01" value="0.06"><output id="fadeVal">0.06</output></div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="reseed">模様を変える</button>
+    <button type="button" id="clear">消す</button>
+  </div>
+
+  <p class="note">
+    <b>ノイズの傾きを90度回して流れにする（カール）</b>と、湧き出しも吸い込みもない流れになります。粒子はその流れに乗って動くだけ。
+    ノイズは3オクターブのバリューノイズで、毎フレーム全粒子ぶん勾配を計算しています。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 640, H = 460;
+  var canvas = document.getElementById("field");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var scaleEl = document.getElementById("scale");
+  var speedEl = document.getElementById("speed");
+  var countEl = document.getElementById("count");
+  var fadeEl = document.getElementById("fade");
+  var scaleVal = document.getElementById("scaleVal");
+  var speedVal = document.getElementById("speedVal");
+  var countVal = document.getElementById("countVal");
+  var fadeVal = document.getElementById("fadeVal");
+
+  var TABLE = 256;
+  var noise = new Float32Array(TABLE * TABLE);
+  var scale = 0.008;
+  var speed = 1.6;
+  var N = 800;
+  var fade = 0.06;
+
+  var px = new Float32Array(1500);
+  var py = new Float32Array(1500);
+  var phase = new Float32Array(1500);
+
+  function reseed() {
+    for (var i = 0; i < noise.length; i++) noise[i] = Math.random();
+    for (var p = 0; p < 1500; p++) {
+      px[p] = Math.random() * W;
+      py[p] = Math.random() * H;
+      phase[p] = Math.random() * 6.283;
+    }
+    ctx.fillStyle = "#03050a";
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  function smooth(t) { return t * t * (3 - 2 * t); }
+
+  function val(x, y) {
+    var xi = Math.floor(x), yi = Math.floor(y);
+    var xf = x - xi, yf = y - yi;
+    var x0 = xi & 255, x1 = (xi + 1) & 255;
+    var y0 = yi & 255, y1 = (yi + 1) & 255;
+    var a = noise[y0 * TABLE + x0], b = noise[y0 * TABLE + x1];
+    var c = noise[y1 * TABLE + x0], d = noise[y1 * TABLE + x1];
+    var u = smooth(xf), v = smooth(yf);
+    return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v;
+  }
+
+  function fbm(x, y) {
+    return val(x, y) * 0.55 + val(x * 2.03, y * 2.01) * 0.3 + val(x * 4.07, y * 3.97) * 0.15;
+  }
+
+  function step(dt) {
+    ctx.fillStyle = "rgba(3,5,10," + fade.toFixed(2) + ")";
+    ctx.fillRect(0, 0, W, H);
+
+    var e = 0.6;
+
+    for (var i = 0; i < N; i++) {
+      var x = px[i], y = py[i];
+      var nx = x * scale, ny = y * scale;
+
+      var dndy = (fbm(nx, ny + e * scale) - fbm(nx, ny - e * scale)) / (2 * e * scale);
+      var dndx = (fbm(nx + e * scale, ny) - fbm(nx - e * scale, ny)) / (2 * e * scale);
+
+      var vx = dndy;
+      var vy = -dndx;
+
+      x += vx * speed * dt * 30;
+      y += vy * speed * dt * 30;
+
+      if (x < 0) x += W; else if (x >= W) x -= W;
+      if (y < 0) y += H; else if (y >= H) y -= H;
+
+      px[i] = x;
+      py[i] = y;
+
+      var sp = Math.sqrt(vx * vx + vy * vy);
+      var hue = 160 + ((Math.atan2(vy, vx) + Math.PI) / 6.283) * 160;
+      ctx.fillStyle = "hsla(" + hue.toFixed(0) + ",85%," + (55 + Math.min(30, sp * 12)).toFixed(0) + "%,.75)";
+      ctx.fillRect(x, y, 1.6, 1.6);
+    }
+  }
+
+  var last = 0, frames = 0, fpsTimer = 0, smoothMs = 0;
+  function loop(now) {
+    if (!fpsTimer) { fpsTimer = now; last = now; }
+    var dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+
+    var t0 = performance.now();
+    step(dt);
+    smoothMs = smoothMs * 0.9 + (performance.now() - t0) * 0.1;
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      msEl.textContent = smoothMs.toFixed(2) + " ms / " + N + " 粒子";
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  scaleEl.addEventListener("input", function () { scale = Number(scaleEl.value); scaleVal.textContent = scale.toFixed(4); });
+  speedEl.addEventListener("input", function () { speed = Number(speedEl.value); speedVal.textContent = speed.toFixed(1); });
+  countEl.addEventListener("input", function () { N = Number(countEl.value); countVal.textContent = String(N); });
+  fadeEl.addEventListener("input", function () { fade = Number(fadeEl.value); fadeVal.textContent = fade.toFixed(2); });
+
+  document.getElementById("reseed").addEventListener("click", function () {
+    reseed();
+  });
+  document.getElementById("clear").addEventListener("click", function () {
+    ctx.fillStyle = "#03050a";
+    ctx.fillRect(0, 0, W, H);
+  });
+
+  reseed();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
