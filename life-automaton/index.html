@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ライフゲーム — 3つのルールで、生きている。</title>
+<meta name="description" content="コンウェイのライフゲームを可視化。生まれる・生き残る・死ぬの3条件だけで、グライダーや銃が動き出します。">
+<meta property="og:title" content="ライフゲーム — 3つのルールで、生きている。">
+<meta property="og:description" content="周りに何人いたら生まれて、何人いたら死ぬか。それだけで模様が勝手に動きます。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/life-automaton/">
+<meta property="og:site_name" content="ライフゲーム">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --green:#86efac;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #10281e 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #141a33 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:720px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--green);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.4rem,5.2vw,1.9rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{position:relative;margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55);touch-action:none}
+  #grid{display:block;width:100%;height:auto;cursor:crosshair}
+  #graph{display:block;width:100%;height:auto;border-top:1px solid var(--line);background:#04070c}
+
+  .rules{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  .rules button, .actions button{
+    flex:1 1 0;font:inherit;font-size:11.5px;font-weight:800;
+    color:var(--muted);background:transparent;border:1.5px solid var(--line);border-radius:9px;
+    padding:9px 8px;min-height:38px;cursor:pointer;
+  }
+  .rules button:hover, .actions button:hover{color:var(--ink);border-color:var(--green)}
+  .rules button[aria-pressed="true"]{background:var(--green);color:#08210f;border-color:var(--green)}
+  .rules button:focus-visible, .actions button:focus-visible{outline:3px solid var(--green);outline-offset:2px}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:96px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--green);min-width:0;cursor:pointer}
+  .row output{width:64px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .readout{display:flex;gap:16px;flex-wrap:wrap;margin-top:6px;font-size:10.5px;color:var(--muted)}
+  .readout b{color:var(--ink);font-variant-numeric:tabular-nums;font-size:12.5px}
+
+  .actions{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+  .actions button{flex:1 1 28%;color:var(--ink)}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">CONWAY'S GAME OF LIFE</p>
+      <h1>ライフゲーム</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="grid" width="640" height="400" role="img" aria-label="ライフゲームのセル"></canvas>
+    <canvas id="graph" width="640" height="64" role="img" aria-label="個体数の推移"></canvas>
+  </div>
+
+  <div class="rules" role="group" aria-label="ルール">
+    <button type="button" data-r="life" aria-pressed="true">Life (B3/S23)</button>
+    <button type="button" data-r="high" aria-pressed="false">HighLife (B36)</button>
+    <button type="button" data-r="seeds" aria-pressed="false">Seeds (B2/S)</button>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="gps">世代/秒</label><input id="gps" type="range" min="1" max="60" step="1" value="12"><output id="gpsVal">12</output></div>
+    <div class="readout">
+      <span>世代 <b id="gen">0</b></span>
+      <span>個体数 <b id="pop">0</b></span>
+      <span>ルール <b id="ruleName">B3/S23</b></span>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="play">停止</button>
+    <button type="button" id="step">1ステップ</button>
+    <button type="button" id="gun">グライダー銃</button>
+    <button type="button" id="soup">ランダム</button>
+    <button type="button" id="clear">消す</button>
+  </div>
+
+  <p class="note">
+    <b>周りに生きているセルが3つなら生まれる、2〜3つなら生き残る、それ以外は死ぬ</b>。たったこれだけで、動く模様（グライダー）や、模様を作り続ける銃（グライダー銃）が生まれます。
+    セルの色は「何世代生きているか」で変えています。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var COLS = 160, ROWS = 100, CELL = 4;
+  var canvas = document.getElementById("grid");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var gCanvas = document.getElementById("graph");
+  var gctx = gCanvas.getContext("2d", { alpha: false });
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var genEl = document.getElementById("gen");
+  var popEl = document.getElementById("pop");
+  var ruleNameEl = document.getElementById("ruleName");
+  var gpsEl = document.getElementById("gps");
+  var gpsVal = document.getElementById("gpsVal");
+
+  var cells = new Uint8Array(COLS * ROWS);
+  var age = new Uint8Array(COLS * ROWS);
+  var next = new Uint8Array(COLS * ROWS);
+  var history = [];
+  var gen = 0;
+  var pop = 0;
+  var gps = 12;
+  var running = true;
+  var acc = 0;
+
+  var RULES = {
+    life: { birth: [3], survive: [2, 3], name: "B3/S23" },
+    high: { birth: [3, 6], survive: [2, 3], name: "B36/S23" },
+    seeds: { birth: [2], survive: [], name: "B2/S" }
+  };
+  var rule = RULES.life;
+
+  function idx(x, y) { return y * COLS + x; }
+
+  function clear() {
+    cells.fill(0);
+    age.fill(0);
+    gen = 0;
+    pop = 0;
+    history = [];
+    genEl.textContent = "0";
+    popEl.textContent = "0";
+    draw();
+    drawGraph();
+  }
+
+  function soup(density) {
+    clear();
+    var d = density || 0.32;
+    for (var y = 0; y < ROWS; y++) {
+      for (var x = 0; x < COLS; x++) {
+        if (Math.random() < d) {
+          cells[idx(x, y)] = 1;
+          age[idx(x, y)] = 1;
+        }
+      }
+    }
+    count();
+    draw();
+  }
+
+  function gun() {
+    clear();
+    var pattern = [
+      "........................O...........",
+      "......................O.O...........",
+      "............OO......OO............OO",
+      "...........O...O....OO............OO",
+      "OO........O.....O...OO..............",
+      "OO........O...O.OO....O.O...........",
+      "..........O.....O.......O...........",
+      "...........O...O....................",
+      "............OO......................"
+    ];
+    var ox = 6, oy = 6;
+    for (var y = 0; y < pattern.length; y++) {
+      for (var x = 0; x < pattern[y].length; x++) {
+        if (pattern[y][x] === "O") {
+          var px = ox + x, py = oy + y;
+          if (px < COLS && py < ROWS) {
+            cells[idx(px, py)] = 1;
+            age[idx(px, py)] = 1;
+          }
+        }
+      }
+    }
+    count();
+    draw();
+  }
+
+  function count() {
+    var c = 0;
+    for (var i = 0; i < cells.length; i++) if (cells[i]) c++;
+    pop = c;
+    popEl.textContent = String(pop);
+  }
+
+  function step() {
+    var i, x, y;
+    for (y = 0; y < ROWS; y++) {
+      for (x = 0; x < COLS; x++) {
+        i = y * COLS + x;
+        var n = 0;
+        for (var dy = -1; dy <= 1; dy++) {
+          var ny = y + dy;
+          if (ny < 0 || ny >= ROWS) continue;
+          for (var dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue;
+            var nx = x + dx;
+            if (nx < 0 || nx >= COLS) continue;
+            if (cells[ny * COLS + nx]) n++;
+          }
+        }
+        var alive = cells[i] === 1;
+        var born = false;
+        for (var b = 0; b < rule.birth.length; b++) if (rule.birth[b] === n) born = true;
+        var survive = false;
+        for (var s = 0; s < rule.survive.length; s++) if (rule.survive[s] === n) survive = true;
+
+        if (alive && survive) { next[i] = 1; age[i] = Math.min(255, age[i] + 1); }
+        else if (!alive && born) { next[i] = 1; age[i] = 1; }
+        else { next[i] = 0; age[i] = 0; }
+      }
+    }
+    var t = cells; cells = next; next = t;
+    gen++;
+    genEl.textContent = String(gen);
+    count();
+
+    history.push(pop);
+    if (history.length > 240) history.shift();
+  }
+
+  function draw() {
+    ctx.fillStyle = "#03050a";
+    ctx.fillRect(0, 0, COLS * CELL, ROWS * CELL);
+
+    for (var y = 0; y < ROWS; y++) {
+      for (var x = 0; x < COLS; x++) {
+        var i = y * COLS + x;
+        if (!cells[i]) continue;
+        var a = age[i];
+        var t = Math.min(1, a / 60);
+        var hue = 150 - t * 90;
+        ctx.fillStyle = "hsl(" + hue.toFixed(0) + ",75%," + (48 + 22 * (1 - t)).toFixed(0) + "%)";
+        ctx.fillRect(x * CELL, y * CELL, CELL - 1, CELL - 1);
+      }
+    }
+  }
+
+  function drawGraph() {
+    var W = gCanvas.width, H = gCanvas.height;
+    gctx.fillStyle = "#04070c";
+    gctx.fillRect(0, 0, W, H);
+
+    if (history.length < 2) return;
+    var max = 1;
+    for (var i = 0; i < history.length; i++) if (history[i] > max) max = history[i];
+
+    gctx.strokeStyle = "rgba(134,239,172,.85)";
+    gctx.lineWidth = 1.4;
+    gctx.beginPath();
+    for (var k = 0; k < history.length; k++) {
+      var px = k / (history.length - 1) * W;
+      var py = H - 6 - (history[k] / max) * (H - 12);
+      if (k === 0) gctx.moveTo(px, py); else gctx.lineTo(px, py);
+    }
+    gctx.stroke();
+
+    gctx.fillStyle = "rgba(233,239,248,.45)";
+    gctx.font = '700 9px "Hiragino Sans","Yu Gothic",system-ui,sans-serif';
+    gctx.fillText("個体数 " + pop + " / max " + max, 8, 13);
+  }
+
+  var frames = 0, fpsTimer = 0, smooth = 0, last = 0;
+  function loop(now) {
+    if (!fpsTimer) { fpsTimer = now; last = now; }
+    var dt = Math.min(0.1, (now - last) / 1000);
+    last = now;
+
+    var t0 = performance.now();
+    if (running) {
+      acc += dt * gps;
+      var steps = 0;
+      while (acc >= 1 && steps < 4) {
+        step();
+        acc -= 1;
+        steps++;
+      }
+    }
+    draw();
+    drawGraph();
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      msEl.textContent = smooth.toFixed(1) + " ms";
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  document.querySelectorAll(".rules button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      rule = RULES[b.getAttribute("data-r")];
+      ruleNameEl.textContent = rule.name;
+      document.querySelectorAll(".rules button").forEach(function (x) {
+        x.setAttribute("aria-pressed", x === b ? "true" : "false");
+      });
+    });
+  });
+
+  gpsEl.addEventListener("input", function () {
+    gps = Number(gpsEl.value);
+    gpsVal.textContent = String(gps);
+  });
+
+  document.getElementById("play").addEventListener("click", function () {
+    running = !running;
+    this.textContent = running ? "停止" : "再開";
+  });
+  document.getElementById("step").addEventListener("click", function () {
+    step();
+    draw();
+    drawGraph();
+  });
+  document.getElementById("gun").addEventListener("click", gun);
+  document.getElementById("soup").addEventListener("click", function () { soup(0.32); });
+  document.getElementById("clear").addEventListener("click", clear);
+
+  var painting = false;
+  function paint(e) {
+    var rect = canvas.getBoundingClientRect();
+    var x = Math.floor((e.clientX - rect.left) / rect.width * COLS);
+    var y = Math.floor((e.clientY - rect.top) / rect.height * ROWS);
+    if (x < 0 || y < 0 || x >= COLS || y >= ROWS) return;
+    cells[idx(x, y)] = 1;
+    age[idx(x, y)] = 1;
+    count();
+    draw();
+  }
+  canvas.addEventListener("pointerdown", function (e) { e.preventDefault(); painting = true; paint(e); });
+  canvas.addEventListener("pointermove", function (e) { if (painting) paint(e); });
+  canvas.addEventListener("pointerup", function () { painting = false; });
+  canvas.addEventListener("pointerleave", function () { painting = false; });
+
+  document.addEventListener("keydown", function (e) {
+    var tag = (e.target && e.target.tagName) || "";
+    if (tag === "INPUT" || tag === "BUTTON") return;
+    if (e.code === "Space") {
+      e.preventDefault();
+      running = !running;
+      document.getElementById("play").textContent = running ? "停止" : "再開";
+    } else if (e.key === "n" || e.key === "N") {
+      step(); draw(); drawGraph();
+    }
+  });
+
+  gun();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
