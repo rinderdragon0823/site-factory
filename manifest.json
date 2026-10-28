@@ -1504,6 +1504,27 @@
           }
         ]
       }
+    },
+    {
+      "slug": "wfc-tiles",
+      "title": "WFC",
+      "pitch": "Wave Function Collapse の可視化。候補を制約で削っていき、パイプがつながった模様が立ち上がります。",
+      "kind": "demo",
+      "date": "2026-10-28",
+      "demo": {
+        "steps": [
+          {
+            "wait": 2600
+          },
+          {
+            "click": "もう一度",
+            "after": 3200
+          },
+          {
+            "wait": 400
+          }
+        ]
+      }
     }
   ]
 }
