@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>トーラス — 面を並べ替えて、立体に見せる。</title>
+<meta name="description" content="3Dトーラスをパース投影・奥行きソート・ランバートシェーディングで描く技術デモ。回転と光を動かせます。">
+<meta property="og:title" content="トーラス — 面を並べ替えて、立体に見せる。">
+<meta property="og:description" content="奥にある面から順に塗る。それだけで立体に見えます。面の法線と光で明るさを決めています。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/torus-3d/">
+<meta property="og:site_name" content="トーラス">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --violet:#a78bfa;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #221a3d 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #0f2230 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:700px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--violet);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.5rem,5.6vw,2rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+  #view{display:block;width:100%;height:auto}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:104px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--violet);min-width:0;cursor:pointer}
+  .row output{width:62px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0c1119;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--violet)}
+  .actions button:focus-visible{outline:3px solid var(--violet);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">3D / PAINTER'S ALGORITHM</p>
+      <h1>トーラス</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms / 0 面</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="view" width="640" height="520" role="img" aria-label="回転する3Dトーラス"></canvas>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="tube">管の太さ</label><input id="tube" type="range" min="0.18" max="0.55" step="0.01" value="0.34"><output id="tubeVal">0.34</output></div>
+    <div class="row"><label for="spd">回転の速さ</label><input id="spd" type="range" min="0" max="1.4" step="0.05" value="0.5"><output id="spdVal">0.50</output></div>
+    <div class="row"><label for="light">光の向き</label><input id="light" type="range" min="0" max="6.28" step="0.05" value="0.9"><output id="lightVal">0.90</output></div>
+    <div class="row"><label for="seg">分割</label><input id="seg" type="range" min="12" max="48" step="2" value="36"><output id="segVal">36</output></div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="pause">停止</button>
+  </div>
+
+  <p class="note">
+    <b>円を回しながら押し出して、面（四角形）の集まりにする</b>。透視投影でスクリーンに落とし、奥にある面から順に塗る（画家のアルゴリズム）。
+    明るさは面の法線と光の内積で決めています。奥行きソートなので、線の交差も自然に見えます。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 640, H = 520;
+  var canvas = document.getElementById("view");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var tubeEl = document.getElementById("tube");
+  var spdEl = document.getElementById("spd");
+  var lightEl = document.getElementById("light");
+  var segEl = document.getElementById("seg");
+  var tubeVal = document.getElementById("tubeVal");
+  var spdVal = document.getElementById("spdVal");
+  var lightVal = document.getElementById("lightVal");
+  var segVal = document.getElementById("segVal");
+
+  var R = 1.0;
+  var tube = 0.34;
+  var speed = 0.5;
+  var lightAng = 0.9;
+  var major = 36;
+  var minor = 18;
+  var running = true;
+  var t = 0;
+  var focal = 3.2;
+
+  function rot(p, ax, ay, az) {
+    var x = p[0], y = p[1], z = p[2];
+    var cx = Math.cos(ax), sx = Math.sin(ax);
+    var y1 = y * cx - z * sx;
+    var z1 = y * sx + z * cx;
+    var cy = Math.cos(ay), sy = Math.sin(ay);
+    var x1 = x * cy + z1 * sy;
+    var z2 = -x * sy + z1 * cy;
+    return [x1, y1, z2];
+  }
+
+  function project(p) {
+    var z = p[2] + 4.2;
+    var s = focal / z;
+    return [W / 2 + p[0] * s * 172, H / 2 - p[1] * s * 172, z];
+  }
+
+  function buildFaces() {
+    var faces = [];
+    var ax = 0.6 + Math.sin(t * 0.31) * 0.22;
+    var ay = t * 0.55;
+    var az = 0.15;
+
+    var lx = Math.cos(lightAng), ly = Math.sin(lightAng), lz = 0.55;
+    var ll = Math.hypot(lx, ly, lz);
+    lx /= ll; ly /= ll; lz /= ll;
+
+    for (var i = 0; i < major; i++) {
+      var u0 = i / major * Math.PI * 2;
+      var u1 = (i + 1) / major * Math.PI * 2;
+
+      for (var j = 0; j < minor; j++) {
+        var v0 = j / minor * Math.PI * 2;
+        var v1 = (j + 1) / minor * Math.PI * 2;
+
+        function point(u, v) {
+          var cx = (R + tube * Math.cos(v)) * Math.cos(u);
+          var cy = (R + tube * Math.cos(v)) * Math.sin(u);
+          var cz = tube * Math.sin(v);
+          return rot([cx, cy, cz], ax * 1.1, ay, az);
+        }
+
+        var a = point(u0, v0), b = point(u1, v0), c = point(u1, v1), d = point(u0, v1);
+
+        // 面の法線（外積）
+        var e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+        var e2 = [d[0] - a[0], d[1] - a[1], d[2] - a[2]];
+        var nx = e1[1] * e2[2] - e1[2] * e2[1];
+        var ny = e1[2] * e2[0] - e1[0] * e2[2];
+        var nz = e1[0] * e2[1] - e1[1] * e2[0];
+        var nl = Math.hypot(nx, ny, nz) || 1;
+        nx /= nl; ny /= nl; nz /= nl;
+
+        var center = [(a[0] + c[0]) / 2, (a[1] + c[1]) / 2, (a[2] + c[2]) / 2];
+
+        // 外側を向いているか（トーラス中心から見た向き）
+        var outward = center[0] * nx + center[1] * ny + center[2] * nz;
+        if (outward < 0) { nx = -nx; ny = -ny; nz = -nz; }
+
+        var diff = Math.max(0, nx * lx + ny * ly + nz * lz);
+        var spec = Math.pow(Math.max(0, nx * lx + ny * ly + nz * (lz + 0.4)) / 1.4, 18);
+
+        var pa = project(a), pb = project(b), pc = project(c), pd = project(d);
+
+        faces.push({
+          z: (pa[2] + pb[2] + pc[2] + pd[2]) / 4,
+          poly: [pa, pb, pc, pd],
+          diff: diff,
+          spec: spec
+        });
+      }
+    }
+
+    faces.sort(function (p, q) { return q.z - p.z; });
+    return faces;
+  }
+
+  function draw() {
+    ctx.fillStyle = "#03050a";
+    ctx.fillRect(0, 0, W, H);
+
+    var faces = buildFaces();
+
+    for (var i = 0; i < faces.length; i++) {
+      var f = faces[i];
+      var shade = 0.30 + f.diff * 1.05;
+      var r = Math.min(255, 140 * shade + 210 * f.spec);
+      var g = Math.min(255, 112 * shade + 190 * f.spec);
+      var b = Math.min(255, 225 * shade + 220 * f.spec);
+
+      ctx.fillStyle = "rgb(" + (r | 0) + "," + (g | 0) + "," + (b | 0) + ")";
+      ctx.beginPath();
+      ctx.moveTo(f.poly[0][0], f.poly[0][1]);
+      ctx.lineTo(f.poly[1][0], f.poly[1][1]);
+      ctx.lineTo(f.poly[2][0], f.poly[2][1]);
+      ctx.lineTo(f.poly[3][0], f.poly[3][1]);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = "rgba(3,5,10,.25)";
+      ctx.lineWidth = 0.6;
+      ctx.stroke();
+    }
+
+    msEl.textContent = (draw.ms || 0).toFixed(1) + " ms / " + faces.length + " 面";
+  }
+
+  var last = 0, frames = 0, fpsTimer = 0;
+  function loop(now) {
+    if (!fpsTimer) { fpsTimer = now; last = now; }
+    var dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+
+    var t0 = performance.now();
+    if (running) t += dt * speed + 0.0007;
+    draw();
+    draw.ms = (draw.ms || 0) * 0.9 + (performance.now() - t0) * 0.1;
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  tubeEl.addEventListener("input", function () { tube = Number(tubeEl.value); tubeVal.textContent = tube.toFixed(2); });
+  spdEl.addEventListener("input", function () { speed = Number(spdEl.value); spdVal.textContent = speed.toFixed(2); });
+  lightEl.addEventListener("input", function () { lightAng = Number(lightEl.value); lightVal.textContent = lightAng.toFixed(2); });
+  segEl.addEventListener("input", function () {
+    major = Number(segEl.value);
+    segVal.textContent = String(major);
+  });
+
+  document.getElementById("pause").addEventListener("click", function () {
+    running = !running;
+    this.textContent = running ? "停止" : "再開";
+  });
+
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
