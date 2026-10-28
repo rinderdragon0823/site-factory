@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>フーリエ — 円を重ねると、形になる。</title>
+<meta name="description" content="フーリエ級数の可視化。回転する円をいくつも足し合わせると、ハートや星の輪郭が描けます。">
+<meta property="og:title" content="フーリエ — 円を重ねると、形になる。">
+<meta property="og:description" content="どんな形も、回転する円の足し算で描ける。フーリエ級数のエピサイクル。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/fourier-epicycles/">
+<meta property="og:site_name" content="フーリエ">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --pink:#f9a8d4;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #2a1430 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #101a33 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:700px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--pink);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.5rem,5.6vw,2rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+  #view{display:block;width:100%;height:auto}
+
+  .presets{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  .presets button{
+    flex:1 1 0;font:inherit;font-size:11.5px;font-weight:800;
+    color:var(--muted);background:transparent;border:1.5px solid var(--line);border-radius:999px;
+    padding:9px 10px;min-height:38px;cursor:pointer;
+  }
+  .presets button:hover{color:var(--ink);border-color:var(--pink)}
+  .presets button[aria-pressed="true"]{background:var(--pink);color:#2a0b1c;border-color:var(--pink)}
+  .presets button:focus-visible{outline:3px solid var(--pink);outline-offset:2px}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:104px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--pink);min-width:0;cursor:pointer}
+  .row output{width:62px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">FOURIER SERIES</p>
+      <h1>フーリエ</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms / 64 円</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="view" width="640" height="520" role="img" aria-label="フーリエ級数で描く図形"></canvas>
+  </div>
+
+  <div class="presets" role="group" aria-label="形">
+    <button type="button" data-s="heart" aria-pressed="true">ハート</button>
+    <button type="button" data-s="star" aria-pressed="false">星</button>
+    <button type="button" data-s="square" aria-pressed="false">四角</button>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="circles">円の数</label><input id="circles" type="range" min="1" max="80" step="1" value="48"><output id="circlesVal">48</output></div>
+    <div class="row"><label for="speed">回る速さ</label><input id="speed" type="range" min="0.1" max="1.5" step="0.05" value="0.45"><output id="speedVal">0.45</output></div>
+    <div class="row"><label for="fade">残像</label><input id="fade" type="range" min="0.02" max="0.2" step="0.01" value="0.07"><output id="fadeVal">0.07</output></div>
+  </div>
+
+  <p class="note">
+    <b>図形の点を複素数にして、離散フーリエ変換すると「回転する円」の足し算に分解できます</b>。半径は振幅、速さは周波数。
+    円を多い順につないでいくと、元の輪郭が描けます。円の数が少ないと、角が丸くなります。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 640, H = 520;
+  var canvas = document.getElementById("view");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var circlesEl = document.getElementById("circles");
+  var speedEl = document.getElementById("speed");
+  var fadeEl = document.getElementById("fade");
+  var circlesVal = document.getElementById("circlesVal");
+  var speedVal = document.getElementById("speedVal");
+  var fadeVal = document.getElementById("fadeVal");
+
+  var SHAPES = {
+    heart: function (t) {
+      var x = 16 * Math.pow(Math.sin(t), 3);
+      var y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
+      return [x, y];
+    },
+    star: function (t) {
+      var r = 1 + 0.55 * Math.cos(5 * t);
+      return [Math.cos(t) * r * 12, Math.sin(t) * r * 12];
+    },
+    square: function (t) {
+      var seg = Math.floor(t / (Math.PI / 2)) % 4;
+      var u = (t % (Math.PI / 2)) / (Math.PI / 2);
+      var s = 10;
+      if (seg === 0) return [-s + 2 * s * u, -s];
+      if (seg === 1) return [s, -s + 2 * s * u];
+      if (seg === 2) return [s - 2 * s * u, s];
+      return [-s, s - 2 * s * u];
+    }
+  };
+
+  var N = 256;
+  var shape = "heart";
+  var coeffs = [];
+  var maxCircles = 48;
+  var speed = 0.45;
+  var fade = 0.07;
+  var u = 0;
+  var trace = [];
+
+  function computeCoeffs() {
+    var f = SHAPES[shape];
+    var xs = new Float64Array(N), ys = new Float64Array(N);
+    for (var i = 0; i < N; i++) {
+      var t = i / N * Math.PI * 2;
+      var p = f(t);
+      xs[i] = p[0];
+      ys[i] = p[1];
+    }
+
+    coeffs = [];
+    for (var k = -N / 2; k < N / 2; k++) {
+      var re = 0, im = 0;
+      for (var n = 0; n < N; n++) {
+        var ang = -2 * Math.PI * k * n / N;
+        var ca = Math.cos(ang), sa = Math.sin(ang);
+        re += xs[n] * ca - ys[n] * sa;
+        im += xs[n] * sa + ys[n] * ca;
+      }
+      re /= N; im /= N;
+      coeffs.push({ k: k, re: re, im: im, amp: Math.hypot(re, im) });
+    }
+    coeffs.sort(function (a, b) { return b.amp - a.amp; });
+    trace = [];
+  }
+
+  var scale = 11;
+  var cx = W / 2, cy = H / 2;
+
+  function draw(now) {
+    ctx.fillStyle = "rgba(3,5,10," + fade.toFixed(2) + ")";
+    ctx.fillRect(0, 0, W, H);
+
+    var x = cx, y = cy;
+    var count = Math.min(maxCircles, coeffs.length);
+
+    ctx.lineWidth = 1;
+    for (var i = 0; i < count; i++) {
+      var c = coeffs[i];
+      var ang = 2 * Math.PI * c.k * u + Math.atan2(c.im, c.re);
+      var r = c.amp * scale;
+      var nx = x + Math.cos(ang) * r;
+      var ny = y - Math.sin(ang) * r;
+
+      if (r > 1.2) {
+        ctx.strokeStyle = "rgba(249,168,212," + Math.min(0.35, 0.06 + c.amp * 0.9) + ")";
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, 6.283);
+        ctx.stroke();
+
+        ctx.strokeStyle = "rgba(233,239,248,.18)";
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(nx, ny);
+        ctx.stroke();
+      }
+
+      x = nx;
+      y = ny;
+    }
+
+    trace.push([x, y]);
+    if (trace.length > 4000) trace.shift();
+
+    ctx.strokeStyle = "rgba(249,168,212,.95)";
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    for (var j = 0; j < trace.length; j++) {
+      var pt = trace[j];
+      if (j === 0) ctx.moveTo(pt[0], pt[1]); else ctx.lineTo(pt[0], pt[1]);
+    }
+    ctx.stroke();
+
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.arc(x, y, 2.6, 0, 6.283);
+    ctx.fill();
+  }
+
+  var last = 0, frames = 0, fpsTimer = 0, smooth = 0;
+  function loop(now) {
+    if (!fpsTimer) { fpsTimer = now; last = now; }
+    var dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+
+    var t0 = performance.now();
+    u += speed * dt * 0.55;
+    if (u > 1) u -= 1;
+    draw(now);
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      msEl.textContent = smooth.toFixed(2) + " ms / " + Math.min(maxCircles, coeffs.length) + " 円";
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  document.querySelectorAll(".presets button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      shape = b.getAttribute("data-s");
+      document.querySelectorAll(".presets button").forEach(function (x) {
+        x.setAttribute("aria-pressed", x === b ? "true" : "false");
+      });
+      computeCoeffs();
+      u = 0;
+      trace = [];
+      ctx.fillStyle = "#03050a";
+      ctx.fillRect(0, 0, W, H);
+    });
+  });
+
+  circlesEl.addEventListener("input", function () {
+    maxCircles = Number(circlesEl.value);
+    circlesVal.textContent = String(maxCircles);
+    ctx.fillStyle = "#03050a";
+    ctx.fillRect(0, 0, W, H);
+    trace = [];
+  });
+  speedEl.addEventListener("input", function () { speed = Number(speedEl.value); speedVal.textContent = speed.toFixed(2); });
+  fadeEl.addEventListener("input", function () { fade = Number(fadeEl.value); fadeVal.textContent = fade.toFixed(2); });
+
+  computeCoeffs();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
