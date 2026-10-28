@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>二分木 — 挿れるたびに、形が変わる。</title>
+<meta name="description" content="二分探索木とAVL木の可視化。同じ数字を入れても、バランスを取るかどうかで木の形と高さが変わります。">
+<meta property="og:title" content="二分木 — 挿れるたびに、形が変わる。">
+<meta property="og:description" content="小さい方は左、大きい方は右。それだけで木になります。バランスを取ると、深さが変わります。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/bst-avl/">
+<meta property="og:site_name" content="二分木">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --mint:#6ee7b7;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #0f2a22 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #1a1430 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:760px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--mint);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.4rem,5.2vw,1.9rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+  #tree{display:block;width:100%;height:auto}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .readout{display:flex;gap:16px;flex-wrap:wrap;font-size:10.5px;color:var(--muted)}
+  .readout b{color:var(--ink);font-variant-numeric:tabular-nums;font-size:12.5px}
+
+  .actions{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+  .actions button{
+    flex:1 1 30%;font:inherit;font-size:11.5px;font-weight:800;
+    color:var(--ink);background:#0c1119;border:1.5px solid var(--line);border-radius:9px;
+    padding:10px 8px;min-height:40px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--mint)}
+  .actions button[aria-pressed="true"]{background:var(--mint);color:#04211a;border-color:var(--mint)}
+  .actions button:focus-visible{outline:3px solid var(--mint);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">BINARY SEARCH TREE / AVL</p>
+      <h1>二分木</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="tree" width="720" height="460" role="img" aria-label="二分木の図"></canvas>
+  </div>
+
+  <div class="panel">
+    <div class="readout">
+      <span>ノード <b id="nCount">0</b></span>
+      <span>高さ <b id="nHeight">0</b></span>
+      <span>回転 <b id="nRot">0</b></span>
+      <span>比較 <b id="nCmp">0</b></span>
+      <span>AVL <b id="nAvl">ON</b></span>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="add">1個追加</button>
+    <button type="button" id="add5">5個追加</button>
+    <button type="button" id="find">探索</button>
+    <button type="button" id="avl" aria-pressed="true">AVL ON</button>
+    <button type="button" id="reset">リセット</button>
+  </div>
+
+  <p class="note">
+    <b>小さい値は左へ、大きい値は右へ</b>。それだけで二分探索木になりますが、順番が悪いと一直線に伸びます。
+    AVLは、左右の高さの差が2以上になったら回転して釣り合いを取ります。比較回数がそのまま探索コストです。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 720, H = 460;
+  var canvas = document.getElementById("tree");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var nCountEl = document.getElementById("nCount");
+  var nHeightEl = document.getElementById("nHeight");
+  var nRotEl = document.getElementById("nRot");
+  var nCmpEl = document.getElementById("nCmp");
+  var nAvlEl = document.getElementById("nAvl");
+
+  var root = null;
+  var avlOn = true;
+  var rotations = 0;
+  var comparisons = 0;
+  var queue = [];
+  var lastInsert = 0;
+  var flash = {};   // key -> time
+  var nextKeyPool = [];
+
+  function height(n) { return n ? n.h : 0; }
+  function upd(n) { n.h = 1 + Math.max(height(n.left), height(n.right)); }
+
+  function rotRight(y) {
+    var x = y.left;
+    y.left = x.right;
+    x.right = y;
+    upd(y); upd(x);
+    rotations++;
+    return x;
+  }
+
+  function rotLeft(x) {
+    var y = x.right;
+    x.right = y.left;
+    y.left = x;
+    upd(x); upd(y);
+    rotations++;
+    return y;
+  }
+
+  function balance(n) {
+    upd(n);
+    var b = height(n.left) - height(n.right);
+    if (b > 1) {
+      if (height(n.left.left) < height(n.left.right)) n.left = rotLeft(n.left);
+      return rotRight(n);
+    }
+    if (b < -1) {
+      if (height(n.right.right) < height(n.right.left)) n.right = rotRight(n.right);
+      return rotLeft(n);
+    }
+    return n;
+  }
+
+  function insert(node, key) {
+    if (!node) return { key: key, left: null, right: null, h: 1 };
+    comparisons++;
+    if (key < node.key) node.left = insert(node.left, key);
+    else if (key > node.key) node.right = insert(node.right, key);
+    else return node;
+    upd(node);
+    return avlOn ? balance(node) : node;
+  }
+
+  function findPath(node, key) {
+    var path = [];
+    while (node) {
+      comparisons++;
+      path.push(node.key);
+      if (key === node.key) return path;
+      node = key < node.key ? node.left : node.right;
+    }
+    return path;
+  }
+
+  function countNodes(n) { return n ? 1 + countNodes(n.left) + countNodes(n.right) : 0; }
+  function treeHeight(n) { return n ? n.h : 0; }
+
+  function randomKey() {
+    var k;
+    do { k = 1 + Math.floor(Math.random() * 99); } while (exists(root, k));
+    return k;
+  }
+
+  function exists(n, key) {
+    while (n) {
+      if (key === n.key) return true;
+      n = key < n.key ? n.left : n.right;
+    }
+    return false;
+  }
+
+  function collect(n, out) {
+    if (!n) return;
+    collect(n.left, out);
+    out.push(n.key);
+    collect(n.right, out);
+  }
+
+  function addKey() {
+    var k = randomKey();
+    root = insert(root, k);
+    flash[k] = performance.now();
+  }
+
+  function reset() {
+    root = null;
+    rotations = 0;
+    comparisons = 0;
+    queue = [];
+    flash = {};
+  }
+
+  function seed() {
+    reset();
+    var keys = [50, 30, 70, 20, 40, 60, 80, 10, 25, 35, 45];
+    for (var i = 0; i < keys.length; i++) root = insert(root, keys[i]);
+  }
+
+  // レイアウト: 中間順で x、深さで y
+  var layout = [];
+  function computeLayout() {
+    layout = [];
+    var order = [];
+    collect(root, order);
+    var index = {};
+    for (var i = 0; i < order.length; i++) index[order[i]] = i;
+
+    (function walk(n, depth) {
+      if (!n) return;
+      walk(n.left, depth + 1);
+      layout.push({ key: n.key, x: index[n.key], d: depth, node: n });
+      walk(n.right, depth + 1);
+    })(root, 0);
+  }
+
+  function draw(now) {
+    ctx.fillStyle = "#03050a";
+    ctx.fillRect(0, 0, W, H);
+
+    if (!layout.length) return;
+
+    var n = layout.length;
+    var maxDepth = 1;
+    for (var i = 0; i < layout.length; i++) if (layout[i].d > maxDepth) maxDepth = layout[i].d;
+
+    var xStep = Math.min(64, (W - 80) / Math.max(1, n - 1 || 1));
+    var yStep = Math.min(72, (H - 100) / Math.max(1, maxDepth));
+    var startX = W / 2 - (n - 1) * xStep / 2;
+    var startY = 46;
+
+    var pos = {};
+    for (var j = 0; j < layout.length; j++) {
+      pos[layout[j].key] = { x: startX + layout[j].x * xStep, y: startY + layout[j].d * yStep };
+    }
+
+    // 辺
+    ctx.strokeStyle = "rgba(233,239,248,.18)";
+    ctx.lineWidth = 1.4;
+    for (var k = 0; k < layout.length; k++) {
+      var node = layout[k].node;
+      var pp = pos[node.key];
+      if (node.left) {
+        ctx.beginPath();
+        ctx.moveTo(pp.x, pp.y);
+        ctx.lineTo(pos[node.left.key].x, pos[node.left.key].y);
+        ctx.stroke();
+      }
+      if (node.right) {
+        ctx.beginPath();
+        ctx.moveTo(pp.x, pp.y);
+        ctx.lineTo(pos[node.right.key].x, pos[node.right.key].y);
+        ctx.stroke();
+      }
+    }
+
+    // ノード
+    for (var m = 0; m < layout.length; m++) {
+      var key = layout[m].key;
+      var p = pos[key];
+      var age = now - (flash[key] || 0);
+      var active = age < 700;
+      var r = 15;
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, 0, 6.283);
+      ctx.fillStyle = active ? "rgba(110,231,183,.95)" : "rgba(110,231,183,.16)";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(110,231,183,.55)";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      ctx.fillStyle = active ? "#04211a" : "#d6f5e8";
+      ctx.font = '800 11px "Hiragino Sans","Yu Gothic",system-ui,sans-serif';
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(String(key), p.x, p.y + 0.5);
+    }
+
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+  }
+
+  var frames = 0, fpsTimer = 0, smooth = 0;
+  function loop(now) {
+    if (!fpsTimer) fpsTimer = now;
+
+    var t0 = performance.now();
+    computeLayout();
+    draw(now);
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+
+    nCountEl.textContent = String(countNodes(root));
+    nHeightEl.textContent = String(treeHeight(root));
+    nRotEl.textContent = String(rotations);
+    nCmpEl.textContent = String(comparisons);
+    nAvlEl.textContent = avlOn ? "ON" : "OFF";
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      msEl.textContent = smooth.toFixed(2) + " ms";
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  document.getElementById("add").addEventListener("click", function () {
+    if (countNodes(root) >= 40) return;
+    addKey();
+  });
+
+  document.getElementById("add5").addEventListener("click", function () {
+    var added = 0;
+    while (countNodes(root) < 40 && added < 5) {
+      addKey();
+      added++;
+    }
+  });
+
+  document.getElementById("find").addEventListener("click", function () {
+    var keys = [];
+    collect(root, keys);
+    if (!keys.length) return;
+    var target = keys[(Math.random() * keys.length) | 0];
+    var before = comparisons;
+    findPath(root, target);
+    flash[target] = performance.now();
+    nCmpEl.textContent = String(comparisons);
+  });
+
+  document.getElementById("avl").addEventListener("click", function () {
+    avlOn = !avlOn;
+    this.setAttribute("aria-pressed", avlOn ? "true" : "false");
+    this.textContent = avlOn ? "AVL ON" : "AVL OFF";
+  });
+
+  document.getElementById("reset").addEventListener("click", function () {
+    seed();
+  });
+
+  document.addEventListener("keydown", function (e) {
+    var tag = (e.target && e.target.tagName) || "";
+    if (tag === "INPUT" || tag === "BUTTON") return;
+    if (e.code === "Space") { e.preventDefault(); if (countNodes(root) < 40) addKey(); }
+    if (e.key === "r" || e.key === "R") seed();
+  });
+
+  seed();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
