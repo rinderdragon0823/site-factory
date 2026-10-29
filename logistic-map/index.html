@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ロジスティック写像 — 単純な式から、無限の形。</title>
+<meta name="description" content="ロジスティック写像の分岐図。x = r x (1−x) を繰り返すだけで、周期倍分岐とカオスが現れます。">
+<meta property="og:title" content="ロジスティック写像 — 単純な式から、無限の形。">
+<meta property="og:description" content="1行の式を繰り返すだけで、倍分岐・カオス・窓が現れる。分岐図を描く技術デモ。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/logistic-map/">
+<meta property="og:site_name" content="ロジスティック写像">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --violet:#a78bfa;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #221a3d 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #101f2e 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:760px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--violet);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.35rem,5vw,1.85rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{position:relative;margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55);touch-action:none}
+  #view{display:block;width:100%;height:auto;cursor:crosshair}
+  .hint{position:absolute;left:10px;bottom:8px;font-size:10px;color:rgba(233,239,248,.45);pointer-events:none}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:108px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--violet);min-width:0;cursor:pointer}
+  .row output{width:64px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .readout{display:flex;gap:16px;flex-wrap:wrap;margin-top:6px;font-size:10.5px;color:var(--muted)}
+  .readout b{color:var(--ink);font-variant-numeric:tabular-nums;font-size:12.5px}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0c1119;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--violet)}
+  .actions button:focus-visible{outline:3px solid var(--violet);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">LOGISTIC MAP</p>
+      <h1>ロジスティック写像</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms / 0 点</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="view" width="720" height="420" role="img" aria-label="ロジスティック写像の分岐図"></canvas>
+    <div class="hint">クリックで拡大できます</div>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="iters">反復回数</label><input id="iters" type="range" min="120" max="1400" step="20" value="600"><output id="itersVal">600</output></div>
+    <div class="row"><label for="trans">捨てる回数</label><input id="trans" type="range" min="50" max="800" step="10" value="300"><output id="transVal">300</output></div>
+    <div class="row"><label for="gamma">色の濃さ</label><input id="gamma" type="range" min="0.3" max="2.0" step="0.05" value="0.75"><output id="gammaVal">0.75</output></div>
+    <div class="readout">
+      <span>r の範囲 <b id="range">2.400 – 4.000</b></span>
+      <span>倍率 <b id="zoom">1×</b></span>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="window3">周期3の窓</button>
+    <button type="button" id="full">全体</button>
+  </div>
+
+  <p class="note">
+    <b>x ← r·x·(1−x)</b> を繰り返すだけ。r を上げていくと、1点→2点→4点…と分岐し、やがてカオスになります。
+    縦軸は x、横軸は r。点の濃さは「その x に何回訪れたか」です。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 720, H = 420;
+  var canvas = document.getElementById("view");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var img = ctx.createImageData(W, H);
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var itersEl = document.getElementById("iters");
+  var transEl = document.getElementById("trans");
+  var gammaEl = document.getElementById("gamma");
+  var itersVal = document.getElementById("itersVal");
+  var transVal = document.getElementById("transVal");
+  var gammaVal = document.getElementById("gammaVal");
+  var rangeEl = document.getElementById("range");
+  var zoomEl = document.getElementById("zoom");
+
+  var rMin = 2.4, rMax = 4.0;
+  var iters = 600;
+  var trans = 300;
+  var gamma = 0.75;
+  var zoom = 1;
+
+  var counts = new Float32Array(W * H);
+  var LUT = new Uint8Array(256 * 3);
+
+  (function buildLut() {
+    var stops = [
+      [0, [3, 5, 10]],
+      [0.25, [40, 18, 80]],
+      [0.5, [120, 40, 140]],
+      [0.72, [220, 90, 90]],
+      [0.88, [250, 170, 60]],
+      [1, [255, 245, 220]]
+    ];
+    for (var i = 0; i < 256; i++) {
+      var t = i / 255;
+      var a = stops[0], b = stops[stops.length - 1];
+      for (var k = 0; k < stops.length - 1; k++) {
+        if (t >= stops[k][0] && t <= stops[k + 1][0]) { a = stops[k]; b = stops[k + 1]; break; }
+      }
+      var f = (t - a[0]) / Math.max(1e-6, b[0] - a[0]);
+      LUT[i * 3] = a[1][0] + (b[1][0] - a[1][0]) * f;
+      LUT[i * 3 + 1] = a[1][1] + (b[1][1] - a[1][1]) * f;
+      LUT[i * 3 + 2] = a[1][2] + (b[1][2] - a[1][2]) * f;
+    }
+  })();
+
+  function compute() {
+    counts.fill(0);
+    var maxCount = 1;
+    var plotted = 0;
+
+    for (var px = 0; px < W; px++) {
+      var r = rMin + (px / (W - 1)) * (rMax - rMin);
+      var x = 0.5;
+      var i;
+
+      for (i = 0; i < trans; i++) {
+        x = r * x * (1 - x);
+        if (!isFinite(x)) break;
+      }
+
+      for (i = 0; i < iters; i++) {
+        x = r * x * (1 - x);
+        if (!isFinite(x)) break;
+
+        var py = Math.floor((1 - x) * (H - 1));
+        if (py >= 0 && py < H) {
+          var idx = py * W + px;
+          counts[idx] += 1;
+          plotted++;
+          if (counts[idx] > maxCount) maxCount = counts[idx];
+        }
+      }
+    }
+
+    var d = img.data;
+    var logMax = Math.log(1 + maxCount);
+    for (var j = 0; j < W * H; j++) {
+      var c = counts[j];
+      var t = c > 0 ? Math.log(1 + c) / logMax : 0;
+      t = Math.pow(t, gamma);
+      var o = ((t * 255) | 0) * 3;
+      var p = j * 4;
+      d[p] = LUT[o];
+      d[p + 1] = LUT[o + 1];
+      d[p + 2] = LUT[o + 2];
+      d[p + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+    return plotted;
+  }
+
+  var lastPlotted = 0;
+  var frames = 0, fpsTimer = 0, smooth = 0;
+
+  function loop(now) {
+    if (!fpsTimer) fpsTimer = now;
+    var t0 = performance.now();
+    lastPlotted = compute();
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+
+    rangeEl.textContent = rMin.toFixed(3) + " – " + rMax.toFixed(3);
+    zoomEl.textContent = (Math.round(zoom * 10) / 10) + "×";
+    msEl.textContent = smooth.toFixed(1) + " ms / " + lastPlotted.toLocaleString("en-US") + " 点";
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  canvas.addEventListener("pointerdown", function (e) {
+    var rect = canvas.getBoundingClientRect();
+    var u = (e.clientX - rect.left) / rect.width;
+    var v = (e.clientY - rect.top) / rect.height;
+
+    var rMid = rMin + u * (rMax - rMin);
+    var span = (rMax - rMin) * 0.45;
+    rMin = Math.max(0, rMid - span / 2);
+    rMax = Math.min(4, rMid + span / 2);
+    zoom *= 1 / 0.45;
+    if (rMax - rMin < 0.0005) { rMin = 2.4; rMax = 4; zoom = 1; }
+  });
+
+  document.getElementById("full").addEventListener("click", function () {
+    rMin = 2.4; rMax = 4.0; zoom = 1;
+  });
+
+  document.getElementById("window3").addEventListener("click", function () {
+    rMin = 3.82; rMax = 3.86; zoom = 1 / 0.1;
+  });
+
+  itersEl.addEventListener("input", function () { iters = Number(itersEl.value); itersVal.textContent = String(iters); });
+  transEl.addEventListener("input", function () { trans = Number(transEl.value); transVal.textContent = String(trans); });
+  gammaEl.addEventListener("input", function () { gamma = Number(gammaEl.value); gammaVal.textContent = gamma.toFixed(2); });
+
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
