@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>カルプラス＝ストロング — ノイズが、弦になる。</title>
+<meta name="description" content="カルプラス＝ストロング法の物理モデリング。ノイズを遅延線に入れて平均を取るだけで、撥弦した弦の音と揺れが生まれます。">
+<meta property="og:title" content="カルプラス＝ストロング — ノイズが、弦になる。">
+<meta property="og:description" content="ノイズを1回鳴らして、遅延線でぐるぐる回す。平均を取ると、弦の音になります。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/karplus-string/">
+<meta property="og:site_name" content="カルプラス＝ストロング">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --amber:#fbbf24;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #2a2110 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #141a33 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:700px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--amber);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.35rem,5vw,1.85rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+  #scope{display:block;width:100%;height:auto}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:104px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--amber);min-width:0;cursor:pointer}
+  .row output{width:66px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0c1119;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--amber)}
+  .actions button[aria-pressed="true"]{background:var(--amber);color:#231a04;border-color:var(--amber)}
+  .actions button:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">KARPLUS-STRONG</p>
+      <h1>カルプラス＝ストロング</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms / 0 サンプル</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="scope" width="640" height="440" role="img" aria-label="弦の振動と波形"></canvas>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="freq">音程</label><input id="freq" type="range" min="80" max="880" step="1" value="196"><output id="freqVal">196 Hz</output></div>
+    <div class="row"><label for="decay">減衰</label><input id="decay" type="range" min="0.90" max="0.999" step="0.001" value="0.996"><output id="decayVal">0.996</output></div>
+    <div class="row"><label for="bright">明るさ</label><input id="bright" type="range" min="0" max="1" step="0.02" value="0.55"><output id="brightVal">0.55</output></div>
+    <div class="row"><label for="pos">撥く位置</label><input id="pos" type="range" min="0.05" max="0.5" step="0.01" value="0.16"><output id="posVal">0.16</output></div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="pluck">撥く</button>
+    <button type="button" id="sound" aria-pressed="false">音を出す</button>
+  </div>
+
+  <p class="note">
+    <b>ノイズを1回だけバッファに入れ、端から順に「隣と平均して減衰させる」</b>だけ。これが遅延線になり、平均化がローパスになって、弦の倍音が減っていきます。
+    遅延の長さで音程が決まり、減衰と明るさで消え方が変わります。音は任意で出せます。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 640, H = 440;
+  var canvas = document.getElementById("scope");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var freqEl = document.getElementById("freq");
+  var decayEl = document.getElementById("decay");
+  var brightEl = document.getElementById("bright");
+  var posEl = document.getElementById("pos");
+  var freqVal = document.getElementById("freqVal");
+  var decayVal = document.getElementById("decayVal");
+  var brightVal = document.getElementById("brightVal");
+  var posVal = document.getElementById("posVal");
+
+  var SR = 22050;
+  var DUR = 2.2;
+  var freq = 196;
+  var decay = 0.996;
+  var bright = 0.55;
+  var pluckPos = 0.16;
+  var buf = new Float32Array(1);
+  var pluckAt = 0;
+  var soundOn = false;
+  var audioCtx = null;
+
+  function synthesize() {
+    var n = Math.floor(SR * DUR);
+    buf = new Float32Array(n);
+    var D = Math.max(8, Math.round(SR / freq));
+    var delay = new Float32Array(D);
+
+    // 撥弦位置でノイズを整形（位置の節を作る）
+    var cut = Math.max(1, Math.round(D * pluckPos));
+    var prev = 0;
+    for (var i = 0; i < D; i++) {
+      var r = Math.random() * 2 - 1;
+      if (i < cut) r = 0;
+      var lp = prev + (r - prev) * (0.15 + bright * 0.85);
+      prev = lp;
+      delay[i] = lp;
+    }
+
+    var idx = 0;
+    var yPrev = 0;
+    for (var s = 0; s < n; s++) {
+      var a = delay[idx];
+      var b = delay[(idx + 1) % D];
+      var y = 0.5 * (a + b) * decay;
+      delay[idx] = y;
+      idx = (idx + 1) % D;
+      buf[s] = y;
+    }
+
+    // 正規化
+    var peak = 0.0001;
+    for (var k = 0; k < n; k++) if (Math.abs(buf[k]) > peak) peak = Math.abs(buf[k]);
+    var g = 0.9 / peak;
+    for (var k2 = 0; k2 < n; k2++) buf[k2] *= g;
+
+    pluckAt = performance.now();
+    msEl.textContent = "— / " + n.toLocaleString("en-US") + " サンプル";
+  }
+
+  function play() {
+    if (!soundOn) return;
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === "suspended") audioCtx.resume();
+      var b = audioCtx.createBuffer(1, buf.length, SR);
+      b.copyToChannel(buf, 0);
+      var src = audioCtx.createBufferSource();
+      src.buffer = b;
+      src.connect(audioCtx.destination);
+      src.start();
+    } catch (e) { /* 音が出せない環境では無視 */ }
+  }
+
+  function draw() {
+    ctx.fillStyle = "#03050a";
+    ctx.fillRect(0, 0, W, H);
+
+    var now = performance.now();
+    var elapsed = (now - pluckAt) / 1000;
+    var n = buf.length;
+    var D = Math.max(8, Math.round(SR / freq));
+
+    // 弦の振動（遅延線の状態を、時間でずらして表示）
+    var stringY = 120;
+    var ampPix = 130;
+    var cols = 320;
+    var phase = elapsed * freq * 2;
+
+    ctx.strokeStyle = "rgba(251,191,36,.9)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (var i = 0; i < cols; i++) {
+      var u = i / (cols - 1);
+      var read = (Math.floor(u * D) + Math.floor(phase * D)) % D;
+      var idxSample = read;
+      var v = buf[idxSample] || 0;
+      var env = Math.exp(-elapsed * 0.55);
+      var y = stringY - v * ampPix * env;
+      if (i === 0) ctx.moveTo(20 + u * (W - 40), y);
+      else ctx.lineTo(20 + u * (W - 40), y);
+    }
+    ctx.stroke();
+
+    // 支点
+    ctx.fillStyle = "rgba(233,239,248,.5)";
+    ctx.fillRect(14, stringY - 3, 5, 6);
+    ctx.fillRect(W - 19, stringY - 3, 5, 6);
+
+    // 波形（全体のエンベロープ）
+    var top = 220, bottom = H - 24;
+    var mid = (top + bottom) / 2;
+    var colW = W / 300;
+    ctx.strokeStyle = "rgba(103,232,249,.85)";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    for (var c = 0; c < 300; c++) {
+      var s0 = Math.floor(c / 300 * n);
+      var s1 = Math.floor((c + 1) / 300 * n);
+      var mn = 1e9, mx = -1e9;
+      for (var s = s0; s < s1; s += 3) {
+        var val = buf[s];
+        if (val < mn) mn = val;
+        if (val > mx) mx = val;
+      }
+      if (mn > mx) { mn = 0; mx = 0; }
+      var x = c * colW;
+      ctx.moveTo(x, mid - mx * 86);
+      ctx.lineTo(x, mid - mn * 86);
+    }
+    ctx.stroke();
+
+    ctx.strokeStyle = "rgba(233,239,248,.12)";
+    ctx.beginPath();
+    ctx.moveTo(0, mid);
+    ctx.lineTo(W, mid);
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(233,239,248,.45)";
+    ctx.font = '700 10px "Hiragino Sans","Yu Gothic",system-ui,sans-serif';
+    ctx.textAlign = "left";
+    ctx.fillText("弦の振動", 20, 40);
+    ctx.fillText("出力波形（2.2秒）", 20, top - 12);
+  }
+
+  var frames = 0, fpsTimer = 0, smooth = 0;
+  function loop(now) {
+    if (!fpsTimer) fpsTimer = now;
+    var t0 = performance.now();
+    draw();
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  function refresh() {
+    synthesize();
+    play();
+  }
+
+  freqEl.addEventListener("input", function () { freq = Number(freqEl.value); freqVal.textContent = freq + " Hz"; });
+  decayEl.addEventListener("input", function () { decay = Number(decayEl.value); decayVal.textContent = decay.toFixed(3); });
+  brightEl.addEventListener("input", function () { bright = Number(brightEl.value); brightVal.textContent = bright.toFixed(2); });
+  posEl.addEventListener("input", function () { pluckPos = Number(posEl.value); posVal.textContent = pluckPos.toFixed(2); });
+
+  document.getElementById("pluck").addEventListener("click", refresh);
+  document.getElementById("sound").addEventListener("click", function () {
+    soundOn = !soundOn;
+    this.setAttribute("aria-pressed", soundOn ? "true" : "false");
+    if (soundOn) play();
+  });
+
+  document.addEventListener("keydown", function (e) {
+    var tag = (e.target && e.target.tagName) || "";
+    if (tag === "INPUT" || tag === "BUTTON") return;
+    if (e.code === "Space") { e.preventDefault(); refresh(); }
+  });
+
+  synthesize();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
