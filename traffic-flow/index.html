@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>交通流 — 渋滞は、後ろから来る。</title>
+<meta name="description" content="ナゲル・シュレッケンベルクの交通流セルオートマトン。車が加速・減速・ランダムに減速して動くだけで、渋滞の波が生まれます。">
+<meta property="og:title" content="交通流 — 渋滞は、後ろから来る。">
+<meta property="og:description" content="前の車との車間で減速して、ときどきランダムに減速する。それだけで渋滞の波ができます。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/traffic-flow/">
+<meta property="og:site_name" content="交通流">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --amber:#fbbf24;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #2a2110 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #101a33 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:760px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--amber);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.4rem,5.2vw,1.9rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+  #view{display:block;width:100%;height:auto}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:112px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--amber);min-width:0;cursor:pointer}
+  .row output{width:66px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .readout{display:flex;gap:16px;flex-wrap:wrap;margin-top:6px;font-size:10.5px;color:var(--muted)}
+  .readout b{color:var(--ink);font-variant-numeric:tabular-nums;font-size:12.5px}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0c1119;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--amber)}
+  .actions button:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">NAGEL-SCHRECKENBERG</p>
+      <h1>交通流</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0 ステップ</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="view" width="640" height="360" role="img" aria-label="道路と渋滞の時空間図"></canvas>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="dens">車の密度</label><input id="dens" type="range" min="0.05" max="0.55" step="0.01" value="0.22"><output id="densVal">0.22</output></div>
+    <div class="row"><label for="p">ブレーキ確率</label><input id="p" type="range" min="0" max="0.5" step="0.01" value="0.25"><output id="pVal">0.25</output></div>
+    <div class="row"><label for="vmax">最高速度</label><input id="vmax" type="range" min="1" max="5" step="1" value="4"><output id="vmaxVal">4</output></div>
+    <div class="readout">
+      <span>平均速度 <b id="avg">0</b></span>
+      <span>流量 <b id="flow">0</b></span>
+      <span>車 <b id="cars">0</b></span>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="reset">やり直す</button>
+    <button type="button" id="pause">停止</button>
+  </div>
+
+  <p class="note">
+    <b>①1つ加速 ②車間まで減速 ③確率 p で1つ減速 ④進む</b>。この4手を全車が同時に行うだけ（ナゲル＝シュレッケンベルク模型）。
+    上は道路、下は時間を右から左へ流した時空間図。斜めの筋が車の流れ、濃い塊が渋滞です。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 640, H = 360;
+  var canvas = document.getElementById("view");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var avgEl = document.getElementById("avg");
+  var flowEl = document.getElementById("flow");
+  var carsEl = document.getElementById("cars");
+  var densEl = document.getElementById("dens");
+  var pEl = document.getElementById("p");
+  var vmaxEl = document.getElementById("vmax");
+  var densVal = document.getElementById("densVal");
+  var pVal = document.getElementById("pVal");
+  var vmaxVal = document.getElementById("vmaxVal");
+
+  var L = 360;
+  var N = 80;
+  var vmax = 4;
+  var pBrake = 0.25;
+  var cars = [];     // {pos, v}
+  var occ = new Int16Array(L).fill(-1);
+  var steps = 0;
+
+  // 時空間図（1ステップ = 1列）
+  var SW = 420, SH = 236;
+  var hist = new ImageData(SW, SH);
+  var histCanvas = document.createElement("canvas");
+  histCanvas.width = SW;
+  histCanvas.height = SH;
+  var hctx = histCanvas.getContext("2d");
+
+  var ROAD_Y = 24, ROAD_H = 52;
+
+  function reset() {
+    N = Math.round(L * Number(densEl.value));
+    cars = [];
+    occ.fill(-1);
+    var arr = [];
+    for (var i = 0; i < L; i++) arr.push(i);
+    for (var i2 = arr.length - 1; i2 > 0; i2--) {
+      var j = Math.floor(Math.random() * (i2 + 1));
+      var t = arr[i2]; arr[i2] = arr[j]; arr[j] = t;
+    }
+    for (var k = 0; k < N; k++) {
+      var pos = arr[k];
+      cars.push({ pos: pos, v: 1 + Math.floor(Math.random() * vmax) });
+      occ[pos] = k;
+    }
+    cars.sort(function (a, b) { return a.pos - b.pos; });
+    steps = 0;
+    var d = hist.data;
+    for (var q = 0; q < d.length; q += 4) {
+      d[q] = 3; d[q + 1] = 5; d[q + 2] = 10; d[q + 3] = 255;
+    }
+    hctx.putImageData(hist, 0, 0);
+
+    ctx.fillStyle = "#03050a";
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  function step() {
+    var n = cars.length;
+    if (n === 0) return;
+
+    // 位置順に並べる
+    cars.sort(function (a, b) { return a.pos - b.pos; });
+
+    var newPos = new Array(n);
+    var speeds = new Array(n);
+
+    for (var i = 0; i < n; i++) {
+      var c = cars[i];
+      var nxt = cars[(i + 1) % n];
+      var gap = (nxt.pos - c.pos + L) % L;
+      if (gap === 0) gap = L;
+
+      var v = Math.min(c.v + 1, vmax);
+      v = Math.min(v, gap - 1);
+      if (v < 0) v = 0;
+      if (Math.random() < pBrake) v = Math.max(0, v - 1);
+
+      c.v = v;
+      speeds[i] = v;
+      newPos[i] = (c.pos + v) % L;
+    }
+
+    occ.fill(-1);
+    for (var k = 0; k < n; k++) {
+      cars[k].pos = newPos[k];
+      occ[newPos[k]] = k;
+    }
+    steps++;
+  }
+
+  function pushColumn() {
+    // 1列ぶん左にずらす（行ごと）
+    var d = hist.data;
+    for (var y = 0; y < SH; y++) {
+      var row = y * SW * 4;
+      d.copyWithin(row, row + 4, row + SW * 4);
+    }
+
+    // 新しい列
+    var col = (SW - 1) * 4;
+    for (var yy = 0; yy < SH; yy++) {
+      var pos = Math.floor(yy / SH * L);
+      var p = yy * SW * 4 + col;
+      var carIdx = occ[pos];
+      if (carIdx >= 0) {
+        var v = cars[carIdx].v;
+        var t = v / Math.max(1, vmax);
+        d[p] = 40 + 215 * t;
+        d[p + 1] = 200 - 120 * t;
+        d[p + 2] = 90 + 60 * (1 - t);
+      } else {
+        d[p] = 3; d[p + 1] = 5; d[p + 2] = 10;
+      }
+      d[p + 3] = 255;
+    }
+  }
+
+  function draw() {
+    ctx.fillStyle = "#03050a";
+    ctx.fillRect(0, 0, W, H);
+
+    // 道路
+    ctx.fillStyle = "#0d1119";
+    ctx.fillRect(0, ROAD_Y, W, ROAD_H);
+    ctx.strokeStyle = "rgba(233,239,248,.12)";
+    ctx.beginPath();
+    ctx.moveTo(0, ROAD_Y + ROAD_H / 2);
+    ctx.lineTo(W, ROAD_Y + ROAD_H / 2);
+    ctx.stroke();
+
+    var scale = W / L;
+    for (var i = 0; i < cars.length; i++) {
+      var c = cars[i];
+      var t = c.v / Math.max(1, vmax);
+      var x = c.pos * scale;
+      ctx.fillStyle = "hsl(" + (28 + t * 40).toFixed(0) + ",90%," + (45 + t * 30).toFixed(0) + "%)";
+      ctx.fillRect(x, ROAD_Y + 14, Math.max(3, scale * 1.6), ROAD_H - 28);
+    }
+
+    // 時空間図
+    hctx.putImageData(hist, 0, 0);
+    ctx.drawImage(histCanvas, 0, 96, W, SH);
+
+    ctx.fillStyle = "rgba(233,239,248,.45)";
+    ctx.font = '700 10px "Hiragino Sans","Yu Gothic",system-ui,sans-serif';
+    ctx.fillText("道路（1周する環状線）", 8, 16);
+    ctx.fillText("時空間図（右が新しい）", 8, 90);
+    ctx.fillText("位置", 8, 340);
+    ctx.fillText("時間 →", W - 70, 340);
+  }
+
+  var frames = 0, fpsTimer = 0, smooth = 0, running = true, acc = 0;
+  function loop(now) {
+    if (!fpsTimer) fpsTimer = now;
+    var t0 = performance.now();
+
+    if (running) {
+      step();
+      pushColumn();
+    }
+    draw();
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+
+    var sum = 0;
+    for (var i = 0; i < cars.length; i++) sum += cars[i].v;
+    var avgV = cars.length ? sum / cars.length : 0;
+    avgEl.textContent = avgV.toFixed(2);
+    flowEl.textContent = (avgV * cars.length / L).toFixed(3);
+    carsEl.textContent = String(cars.length);
+    msEl.textContent = steps.toLocaleString("en-US") + " ステップ";
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  densEl.addEventListener("input", function () { densVal.textContent = Number(densEl.value).toFixed(2); reset(); });
+  pEl.addEventListener("input", function () { pBrake = Number(pEl.value); pVal.textContent = pBrake.toFixed(2); });
+  vmaxEl.addEventListener("input", function () { vmax = Number(vmaxEl.value); vmaxVal.textContent = String(vmax); });
+
+  document.getElementById("reset").addEventListener("click", reset);
+  document.getElementById("pause").addEventListener("click", function () {
+    running = !running;
+    this.textContent = running ? "停止" : "再開";
+  });
+
+  reset();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
