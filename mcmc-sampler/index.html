@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MCMC — 棄却される提案が、分布を描く。</title>
+<meta name="description" content="メトロポリス・ヘイスティング法の可視化。提案して、確率で受け入れる。それだけで、目標の分布に沿ったサンプルが溜まります。">
+<meta property="og:title" content="MCMC — 棄却される提案が、分布を描く。">
+<meta property="og:description" content="行ってみて、確率で受け入れる。それだけで、目的の分布からサンプルが取れます。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/mcmc-sampler/">
+<meta property="og:site_name" content="MCMC">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --cyan:#67e8f9;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #0f2633 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #1a1430 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:720px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--cyan);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.5rem,5.6vw,2rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+  #view{display:block;width:100%;height:auto}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:112px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--cyan);min-width:0;cursor:pointer}
+  .row output{width:66px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .readout{display:flex;gap:16px;flex-wrap:wrap;margin-top:6px;font-size:10.5px;color:var(--muted)}
+  .readout b{color:var(--ink);font-variant-numeric:tabular-nums;font-size:12.5px}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0c1119;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--cyan)}
+  .actions button:focus-visible{outline:3px solid var(--cyan);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">METROPOLIS-HASTINGS</p>
+      <h1>MCMC</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0 サンプル</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="view" width="640" height="460" role="img" aria-label="MCMCのサンプリングとヒストグラム"></canvas>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="width">提案の幅</label><input id="width" type="range" min="0.05" max="4" step="0.05" value="0.8"><output id="widthVal">0.80</output></div>
+    <div class="row"><label for="rate">1フレームの歩数</label><input id="rate" type="range" min="1" max="60" step="1" value="12"><output id="rateVal">12</output></div>
+    <div class="readout">
+      <span>サンプル <b id="n">0</b></span>
+      <span>採用率 <b id="acc">0%</b></span>
+      <span>x <b id="xpos">0.00</b></span>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="reset">やり直す</button>
+    <button type="button" id="pause">停止</button>
+  </div>
+
+  <p class="note">
+    <b>今いる場所から新しい点を提案し、目標分布の高さの比で受け入れる</b>（メトロポリス・ヘイスティング法）。棄却されると動かないだけ。
+    幅が小さいと採用率は上がるがゆっくり進み、大きすぎるとほとんど棄却されます。下の帯は、x の履歴です。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 640, H = 460;
+  var canvas = document.getElementById("view");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var nEl = document.getElementById("n");
+  var accEl = document.getElementById("acc");
+  var xEl = document.getElementById("xpos");
+  var widthEl = document.getElementById("width");
+  var rateEl = document.getElementById("rate");
+  var widthVal = document.getElementById("widthVal");
+  var rateVal = document.getElementById("rateVal");
+
+  var XMIN = -7, XMAX = 12;
+  var proposal = 0.8;
+  var perFrame = 12;
+  var x = 0;
+  var samples = [];
+  var trace = [];
+  var accepted = 0;
+  var proposed = 0;
+  var running = true;
+
+  function target(v) {
+    var a = 0.6 * Math.exp(-Math.pow(v - 1.5, 2) / (2 * 0.9 * 0.9));
+    var b = 0.4 * Math.exp(-Math.pow(v - 7.5, 2) / (2 * 1.8 * 1.8));
+    return a + b;
+  }
+
+  function gauss() {
+    var u = 0, v = 0;
+    while (u === 0) u = Math.random();
+    while (v === 0) v = Math.random();
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  }
+
+  function reset() {
+    x = 0;
+    samples = [];
+    trace = [];
+    accepted = 0;
+    proposed = 0;
+  }
+
+  function step() {
+    var cand = x + gauss() * proposal;
+    var ratio = target(cand) / Math.max(1e-9, target(x));
+    proposed++;
+    if (Math.random() < Math.min(1, ratio)) {
+      x = cand;
+      accepted++;
+    }
+    samples.push(x);
+    trace.push(x);
+    if (trace.length > 420) trace.shift();
+    if (samples.length > 20000) samples.shift();
+  }
+
+  function xToPx(v) {
+    return 40 + (v - XMIN) / (XMAX - XMIN) * (W - 80);
+  }
+
+  function draw() {
+    ctx.fillStyle = "#03050a";
+    ctx.fillRect(0, 0, W, H);
+
+    var baseY = 300;
+    var plotH = 220;
+    var maxP = 0.62;
+
+    // 目標分布
+    ctx.strokeStyle = "rgba(103,232,249,.9)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (var i = 0; i <= 300; i++) {
+      var v = XMIN + (XMAX - XMIN) * i / 300;
+      var px = xToPx(v);
+      var py = baseY - target(v) / maxP * plotH;
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+
+    // ヒストグラム
+    var BINS = 60;
+    var counts = new Array(BINS).fill(0);
+    for (var s = 0; s < samples.length; s++) {
+      var b = Math.floor((samples[s] - XMIN) / (XMAX - XMIN) * BINS);
+      if (b >= 0 && b < BINS) counts[b]++;
+    }
+    var maxCount = 1;
+    for (var c = 0; c < BINS; c++) if (counts[c] > maxCount) maxCount = counts[c];
+
+    var binW = (W - 80) / BINS;
+    for (var k = 0; k < BINS; k++) {
+      if (!counts[k]) continue;
+      var h = counts[k] / maxCount * plotH;
+      var vx = 40 + k * binW;
+      ctx.fillStyle = "rgba(249,168,212,.35)";
+      ctx.fillRect(vx, baseY - h, binW - 1, h);
+      ctx.strokeStyle = "rgba(249,168,212,.55)";
+      ctx.strokeRect(vx + 0.5, baseY - h + 0.5, binW - 2, Math.max(0, h - 1));
+    }
+
+    // 軸
+    ctx.strokeStyle = "rgba(233,239,248,.18)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(30, baseY + 0.5);
+    ctx.lineTo(W - 20, baseY + 0.5);
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(233,239,248,.45)";
+    ctx.font = '700 10px "Hiragino Sans","Yu Gothic",system-ui,sans-serif';
+    ctx.fillText("-7", 34, baseY + 16);
+    ctx.fillText("12", W - 34, baseY + 16);
+
+    // 現在位置
+    var cx = xToPx(x);
+    ctx.strokeStyle = "#fde68a";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, baseY);
+    ctx.lineTo(cx, baseY - plotH - 6);
+    ctx.stroke();
+    ctx.fillStyle = "#fde68a";
+    ctx.beginPath();
+    ctx.arc(cx, baseY - target(x) / maxP * plotH, 4.5, 0, 6.283);
+    ctx.fill();
+
+    // 履歴（トレース）
+    var traceTop = 352, traceH = 82;
+    ctx.strokeStyle = "rgba(233,239,248,.08)";
+    ctx.strokeRect(30.5, traceTop + 0.5, W - 60, traceH);
+    ctx.strokeStyle = "rgba(110,231,183,.9)";
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    for (var t = 0; t < trace.length; t++) {
+      var tx = 30 + t / 420 * (W - 60);
+      var ty = traceTop + traceH - (trace[t] - XMIN) / (XMAX - XMIN) * traceH;
+      if (t === 0) ctx.moveTo(tx, ty); else ctx.lineTo(tx, ty);
+    }
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(233,239,248,.45)";
+    ctx.fillText("x の履歴（最近420歩）", 34, traceTop - 8);
+    ctx.fillText("目標分布とサンプルのヒストグラム", 34, 24);
+  }
+
+  var frames = 0, fpsTimer = 0, smooth = 0;
+  function loop(now) {
+    if (!fpsTimer) fpsTimer = now;
+    var t0 = performance.now();
+
+    if (running) {
+      for (var i = 0; i < perFrame; i++) step();
+    }
+    draw();
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+
+    nEl.textContent = samples.length.toLocaleString("en-US");
+    accEl.textContent = (proposed ? Math.round(accepted / proposed * 100) : 0) + "%";
+    xEl.textContent = x.toFixed(2);
+    msEl.textContent = samples.length.toLocaleString("en-US") + " サンプル";
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  widthEl.addEventListener("input", function () { proposal = Number(widthEl.value); widthVal.textContent = proposal.toFixed(2); });
+  rateEl.addEventListener("input", function () { perFrame = Number(rateEl.value); rateVal.textContent = String(perFrame); });
+
+  document.getElementById("reset").addEventListener("click", reset);
+  document.getElementById("pause").addEventListener("click", function () {
+    running = !running;
+    this.textContent = running ? "停止" : "再開";
+  });
+
+  reset();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
