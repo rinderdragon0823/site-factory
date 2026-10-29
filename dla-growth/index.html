@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DLA — ランダムウォークが、木を作る。</title>
+<meta name="description" content="拡散律速凝集（DLA）の可視化。粒がランダムに歩いて、くっついた場所から枝が伸びていきます。">
+<meta property="og:title" content="DLA — ランダムウォークが、木を作る。">
+<meta property="og:description" content="でたらめに歩く粒が、ぶつかった所で止まる。それだけで、枝分かれした形が生まれます。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/dla-growth/">
+<meta property="og:site_name" content="DLA">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --mint:#6ee7b7;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #0f2a22 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #1a1430 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:720px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--mint);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.4rem,5.2vw,1.9rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+  #view{display:block;width:100%;height:auto}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:104px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--mint);min-width:0;cursor:pointer}
+  .row output{width:66px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .readout{display:flex;gap:16px;flex-wrap:wrap;margin-top:6px;font-size:10.5px;color:var(--muted)}
+  .readout b{color:var(--ink);font-variant-numeric:tabular-nums;font-size:12.5px}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0c1119;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--mint)}
+  .actions button:focus-visible{outline:3px solid var(--mint);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">DIFFUSION-LIMITED AGGREGATION</p>
+      <h1>DLA</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0 粒子</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="view" width="640" height="520" role="img" aria-label="DLAで成長する枝"></canvas>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="speed">歩く速さ</label><input id="speed" type="range" min="1" max="12" step="1" value="8"><output id="speedVal">8</output></div>
+    <div class="row"><label for="stick">付着率</label><input id="stick" type="range" min="0.05" max="1" step="0.05" value="0.85"><output id="stickVal">0.85</output></div>
+    <div class="row"><label for="walkers">粒の数</label><input id="walkers" type="range" min="50" max="600" step="25" value="420"><output id="walkersVal">420</output></div>
+    <div class="readout">
+      <span>付着 <b id="stuck">0</b></span>
+      <span>広がり <b id="radius">0</b></span>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="reset">やり直す</button>
+    <button type="button" id="pause">停止</button>
+  </div>
+
+  <p class="note">
+    <b>粒をでたらめに歩かせ、まわりの1マスに仲間がいたら、確率でくっつける</b>。それだけです。中心から外へ枝が伸び、先端ほど付着しやすくなって、木や雷のような形になります。
+    FPSと付着数、広がり（マス）を表示しています。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 640, H = 520, CELL = 3;
+  var COLS = Math.floor(W / CELL), ROWS = Math.floor(H / CELL);
+  var canvas = document.getElementById("view");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var stuckEl = document.getElementById("stuck");
+  var radiusEl = document.getElementById("radius");
+  var speedEl = document.getElementById("speed");
+  var stickEl = document.getElementById("stick");
+  var walkersEl = document.getElementById("walkers");
+  var speedVal = document.getElementById("speedVal");
+  var stickVal = document.getElementById("stickVal");
+  var walkersVal = document.getElementById("walkersVal");
+
+  var occ = new Uint8Array(COLS * ROWS);
+  var walkers = [];
+  var nWalkers = 420;
+  var speed = 8;
+  var stick = 0.85;
+  var running = true;
+  var stuck = 0;
+  var maxR = 0;
+  var cx = COLS >> 1, cy = ROWS >> 1;
+
+  function idx(x, y) { return y * COLS + x; }
+
+  function reset() {
+    occ.fill(0);
+    walkers = [];
+    stuck = 0;
+    maxR = 0;
+    ctx.fillStyle = "#03050a";
+    ctx.fillRect(0, 0, W, H);
+
+    occ[idx(cx, cy)] = 1;
+    stuck = 1;
+    paintCell(cx, cy);
+
+    for (var i = 0; i < nWalkers; i++) spawn();
+    updateReadout();
+  }
+
+  function spawn() {
+    var ang = Math.random() * Math.PI * 2;
+    var r = maxR + 8 + Math.random() * 25;
+    var x = Math.round(cx + Math.cos(ang) * r);
+    var y = Math.round(cy + Math.sin(ang) * r);
+    if (x < 1 || y < 1 || x >= COLS - 1 || y >= ROWS - 1) {
+      x = Math.max(1, Math.min(COLS - 2, x));
+      y = Math.max(1, Math.min(ROWS - 2, y));
+    }
+    walkers.push({ x: x, y: y });
+  }
+
+  function paintCell(x, y) {
+    var d = Math.hypot(x - cx, y - cy);
+    var t = Math.min(1, d / 90);
+    var hue = 165 - t * 100;
+    ctx.fillStyle = "hsl(" + hue.toFixed(0) + ",80%," + (62 - t * 20).toFixed(0) + "%)";
+    ctx.fillRect(x * CELL, y * CELL, CELL - 0.6, CELL - 0.6);
+  }
+
+  function neighborsOccupied(x, y) {
+    return occ[idx(x - 1, y)] || occ[idx(x + 1, y)] || occ[idx(x, y - 1)] || occ[idx(x, y + 1)] ||
+           occ[idx(x - 1, y - 1)] || occ[idx(x + 1, y - 1)] || occ[idx(x - 1, y + 1)] || occ[idx(x + 1, y + 1)];
+  }
+
+  function step() {
+    for (var i = 0; i < walkers.length; i++) {
+      var w = walkers[i];
+      for (var s = 0; s < speed; s++) {
+        var dir = (Math.random() * 4) | 0;
+        if (dir === 0) w.x += 1;
+        else if (dir === 1) w.x -= 1;
+        else if (dir === 2) w.y += 1;
+        else w.y -= 1;
+
+        if (w.x < 1 || w.y < 1 || w.x >= COLS - 1 || w.y >= ROWS - 1) {
+          break;
+        }
+        if (neighborsOccupied(w.x, w.y)) {
+          if (Math.random() < stick) {
+            occ[idx(w.x, w.y)] = 1;
+            stuck++;
+            paintCell(w.x, w.y);
+            var d = Math.hypot(w.x - cx, w.y - cy);
+            if (d > maxR) maxR = d;
+            w.dead = true;
+            break;
+          }
+        }
+      }
+    }
+
+    var kept = [];
+    for (var k = 0; k < walkers.length; k++) {
+      if (!walkers[k].dead) kept.push(walkers[k]);
+    }
+    walkers = kept;
+    while (walkers.length < nWalkers) spawn();
+  }
+
+  function updateReadout() {
+    stuckEl.textContent = String(stuck);
+    radiusEl.textContent = Math.round(maxR) + " マス";
+    msEl.textContent = stuck.toLocaleString("en-US") + " 粒子";
+  }
+
+  var frames = 0, fpsTimer = 0, smooth = 0;
+  function loop(now) {
+    if (!fpsTimer) fpsTimer = now;
+    var t0 = performance.now();
+    if (running) step();
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+    updateReadout();
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  speedEl.addEventListener("input", function () { speed = Number(speedEl.value); speedVal.textContent = String(speed); });
+  stickEl.addEventListener("input", function () { stick = Number(stickEl.value); stickVal.textContent = stick.toFixed(2); });
+  walkersEl.addEventListener("input", function () {
+    nWalkers = Number(walkersEl.value);
+    walkersVal.textContent = String(nWalkers);
+  });
+
+  document.getElementById("reset").addEventListener("click", reset);
+  document.getElementById("pause").addEventListener("click", function () {
+    running = !running;
+    this.textContent = running ? "停止" : "再開";
+  });
+
+  reset();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
