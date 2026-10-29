@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ディザ — 少ない色数で、なめらかに見せる。</title>
+<meta name="description" content="ディザリングの可視化。誤差拡散と Bayer マトリクスで、2色しかなくても階調があるように見せられます。">
+<meta property="og:title" content="ディザ — 少ない色数で、なめらかに見せる。">
+<meta property="og:description" content="色を減らして、余った誤差を隣に配る。それだけでグラデーションに見えます。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/dither-lab/">
+<meta property="og:site_name" content="ディザ">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --lime:#c6f36b;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #1e2a12 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #141a33 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:820px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--lime);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.4rem,5.2vw,1.9rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+  .pair{display:flex;gap:2px}
+  .pair canvas{display:block;width:50%;height:auto;background:#000}
+  .labels{display:flex;justify-content:space-between;padding:6px 10px;font-size:10px;color:var(--muted);letter-spacing:.12em}
+
+  .presets{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  .presets button{
+    flex:1 1 0;font:inherit;font-size:11px;font-weight:800;
+    color:var(--muted);background:transparent;border:1.5px solid var(--line);border-radius:999px;
+    padding:8px 6px;min-height:36px;cursor:pointer;
+  }
+  .presets button:hover{color:var(--ink);border-color:var(--lime)}
+  .presets button[aria-pressed="true"]{background:var(--lime);color:#1b2408;border-color:var(--lime)}
+  .presets button:focus-visible{outline:3px solid var(--lime);outline-offset:2px}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:104px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--lime);min-width:0;cursor:pointer}
+  .row output{width:64px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">DITHERING</p>
+      <h1>ディザ</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms / 76,800 px</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="pair">
+      <canvas id="src" width="320" height="240" role="img" aria-label="元の画像"></canvas>
+      <canvas id="out" width="320" height="240" role="img" aria-label="ディザ後の画像"></canvas>
+    </div>
+    <div class="labels"><span>ORIGINAL</span><span>DITHERED</span></div>
+  </div>
+
+  <div class="presets" role="group" aria-label="アルゴリズム">
+    <button type="button" data-a="fs" aria-pressed="true">誤差拡散</button>
+    <button type="button" data-a="bayer4" aria-pressed="false">Bayer 4</button>
+    <button type="button" data-a="bayer8" aria-pressed="false">Bayer 8</button>
+    <button type="button" data-a="thresh" aria-pressed="false">しきい値</button>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="bits">階調（ビット）</label><input id="bits" type="range" min="1" max="4" step="1" value="1"><output id="bitsVal">1</output></div>
+    <div class="row"><label for="strength">誤差の強さ</label><input id="strength" type="range" min="0" max="1" step="0.05" value="1"><output id="strengthVal">1.00</output></div>
+    <div class="row"><label for="speed">元画像の動き</label><input id="speed" type="range" min="0" max="1" step="0.05" value="0.35"><output id="speedVal">0.35</output></div>
+  </div>
+
+  <p class="note">
+    <b>各画素を一番近い階調に丸めて、余った誤差を右・左下・下・右下へ配る</b>（Floyd–Steinberg）。Bayer は規則的なしきい値の表で代用します。
+    2色しか使っていないのに、遠目にはなめらかに見えるのがディザの面白さです。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 320, H = 240;
+  var srcC = document.getElementById("src");
+  var outC = document.getElementById("out");
+  var sctx = srcC.getContext("2d");
+  var octx = outC.getContext("2d");
+  var srcImg = sctx.createImageData(W, H);
+  var outImg = octx.createImageData(W, H);
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var bitsEl = document.getElementById("bits");
+  var strengthEl = document.getElementById("strength");
+  var speedEl = document.getElementById("speed");
+  var bitsVal = document.getElementById("bitsVal");
+  var strengthVal = document.getElementById("strengthVal");
+  var speedVal = document.getElementById("speedVal");
+
+  var algo = "fs";
+  var bits = 1;
+  var strength = 1;
+  var speed = 0.35;
+  var t = 0;
+
+  var BAYER4 = [
+    0, 8, 2, 10,
+    12, 4, 14, 6,
+    3, 11, 1, 9,
+    15, 7, 13, 5
+  ];
+
+  var BAYER8 = (function () {
+    var m = [];
+    for (var y = 0; y < 8; y++) {
+      for (var x = 0; x < 8; x++) {
+        var v = 0;
+        var xx = x, yy = y, bit = 0;
+        for (var i = 0; i < 3; i++) {
+          v |= ((yy >> (2 - i)) & 1) ^ ((xx >> (2 - i)) & 1) ? 0 : 0;
+          bit++;
+        }
+        m.push((x * 7 + y * 13 + ((x ^ y) % 5) * 3) % 64);
+      }
+    }
+    return m;
+  })();
+
+  function drawSource() {
+    var d = srcImg.data;
+    var p = 0;
+    for (var y = 0; y < H; y++) {
+      for (var x = 0; x < W; x++) {
+        var u = x / W, v = y / H;
+        var wave = Math.sin((u * 5 + t * speed) * Math.PI) * 0.18;
+        var base = 0.25 + 0.55 * (1 - v) + wave;
+
+        // 円（光）
+        var dx = u - 0.32, dy = v - 0.35;
+        var circle = Math.max(0, 1 - Math.sqrt(dx * dx + dy * dy) * 4);
+        base += circle * 0.45;
+
+        // 濃い帯
+        var band = Math.abs(Math.sin((v * 9 + t * 0.3) * Math.PI)) * 0.12;
+        base = Math.max(0, Math.min(1, base - band));
+
+        d[p] = d[p + 1] = d[p + 2] = base * 255;
+        d[p + 3] = 255;
+        p += 4;
+      }
+    }
+    sctx.putImageData(srcImg, 0, 0);
+  }
+
+  function quantize(v, levels) {
+    return Math.round(v * (levels - 1)) / (levels - 1);
+  }
+
+  function apply() {
+    var levels = Math.pow(2, bits);
+    var src = srcImg.data;
+    var dst = outImg.data;
+    var i, p;
+
+    if (algo === "fs") {
+      var buf = new Float32Array(W * H);
+      for (i = 0; i < W * H; i++) buf[i] = src[i * 4] / 255;
+
+      for (var y = 0; y < H; y++) {
+        var rev = false;
+        for (var xi = 0; xi < W; xi++) {
+          var x = xi;
+          var old = buf[y * W + x];
+          var nv = quantize(old, levels);
+          var err = (old - nv) * strength;
+          buf[y * W + x] = nv;
+
+          if (x + 1 < W) buf[y * W + x + 1] += err * 7 / 16;
+          if (y + 1 < H) {
+            if (x > 0) buf[(y + 1) * W + x - 1] += err * 3 / 16;
+            buf[(y + 1) * W + x] += err * 5 / 16;
+            if (x + 1 < W) buf[(y + 1) * W + x + 1] += err * 1 / 16;
+          }
+        }
+      }
+
+      for (i = 0; i < W * H; i++) {
+        var val = Math.max(0, Math.min(1, buf[i])) * 255;
+        p = i * 4;
+        dst[p] = dst[p + 1] = dst[p + 2] = val;
+        dst[p + 3] = 255;
+      }
+    } else if (algo === "thresh") {
+      for (i = 0; i < W * H; i++) {
+        var v0 = src[i * 4] / 255;
+        var v1 = quantize(v0, levels) * 255;
+        p = i * 4;
+        dst[p] = dst[p + 1] = dst[p + 2] = v1;
+        dst[p + 3] = 255;
+      }
+    } else {
+      var mtx = algo === "bayer4" ? BAYER4 : BAYER8;
+      var n = algo === "bayer4" ? 4 : 8;
+      var denom = n * n;
+      for (var yy = 0; yy < H; yy++) {
+        for (var xx = 0; xx < W; xx++) {
+          var idx = yy * W + xx;
+          var val2 = src[idx * 4] / 255;
+          var th = (mtx[(yy % n) * n + (xx % n)] + 0.5) / denom;
+          var step = 1 / (levels - 1);
+          var q = Math.round((val2 + (th - 0.5) * step) / step) * step;
+          var g = Math.max(0, Math.min(1, q)) * 255;
+          p = idx * 4;
+          dst[p] = dst[p + 1] = dst[p + 2] = g;
+          dst[p + 3] = 255;
+        }
+      }
+    }
+
+    octx.putImageData(outImg, 0, 0);
+  }
+
+  var frames = 0, fpsTimer = 0, smooth = 0;
+  function loop(now) {
+    if (!fpsTimer) fpsTimer = now;
+    t += 0.016;
+
+    var t0 = performance.now();
+    drawSource();
+    apply();
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      msEl.textContent = smooth.toFixed(1) + " ms / " + (W * H).toLocaleString("en-US") + " px";
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  document.querySelectorAll(".presets button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      algo = b.getAttribute("data-a");
+      document.querySelectorAll(".presets button").forEach(function (x) {
+        x.setAttribute("aria-pressed", x === b ? "true" : "false");
+      });
+    });
+  });
+
+  bitsEl.addEventListener("input", function () { bits = Number(bitsEl.value); bitsVal.textContent = String(bits); });
+  strengthEl.addEventListener("input", function () { strength = Number(strengthEl.value); strengthVal.textContent = strength.toFixed(2); });
+  speedEl.addEventListener("input", function () { speed = Number(speedEl.value); speedVal.textContent = speed.toFixed(2); });
+
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
