@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LZ77 — 前にも出てきた、を使う。</title>
+<meta name="description" content="LZ77圧縮の可視化。スライド窓の中で最長一致を探して、距離と長さで置き換えていきます。">
+<meta property="og:title" content="LZ77 — 前にも出てきた、を使う。">
+<meta property="og:description" content="前の同じ並びを指して「3文字前から5文字」と書く。それだけで文章が縮みます。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/lz77-compress/">
+<meta property="og:site_name" content="LZ77">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --cyan:#67e8f9;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #0f2b33 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #191430 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:780px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--cyan);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.4rem,5.2vw,1.9rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+  #view{display:block;width:100%;height:auto}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:112px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--cyan);min-width:0;cursor:pointer}
+  .row output{width:64px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .readout{display:flex;gap:16px;flex-wrap:wrap;margin-top:6px;font-size:10.5px;color:var(--muted)}
+  .readout b{color:var(--ink);font-variant-numeric:tabular-nums;font-size:12.5px}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0c1119;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--cyan)}
+  .actions button:focus-visible{outline:3px solid var(--cyan);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">LZ77 / SLIDING WINDOW</p>
+      <h1>LZ77</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0 ms</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="view" width="720" height="420" role="img" aria-label="LZ77の文字列処理"></canvas>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="win">窓の大きさ</label><input id="win" type="range" min="8" max="64" step="1" value="32"><output id="winVal">32</output></div>
+    <div class="row"><label for="minm">最小一致長</label><input id="minm" type="range" min="2" max="6" step="1" value="3"><output id="minmVal">3</output></div>
+    <div class="readout">
+      <span>位置 <b id="pos">0</b></span>
+      <span>トークン <b id="tok">0</b></span>
+      <span>サイズ比 <b id="ratio">1.00</b></span>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="step">1手進む</button>
+    <button type="button" id="auto">自動</button>
+    <button type="button" id="reset">やり直す</button>
+  </div>
+
+  <p class="note">
+    <b>直前の窓の中で、いまの位置から始まる並びを探す</b>。見つかれば「何文字前から何文字」と書いて、その分まとめて進みます。
+    見つからなければ1文字そのまま。灰＝窓、橙＝照合中の並び、水色＝一致した元の場所です。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 720, H = 420;
+  var canvas = document.getElementById("view");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var posEl = document.getElementById("pos");
+  var tokEl = document.getElementById("tok");
+  var ratioEl = document.getElementById("ratio");
+  var winEl = document.getElementById("win");
+  var minmEl = document.getElementById("minm");
+  var winVal = document.getElementById("winVal");
+  var minmVal = document.getElementById("minmVal");
+
+  var TEXT = "むかしむかし、あるところに、おじいさんとおばあさんがすんでいました。" +
+             "おじいさんは山へしばかりに、おばあさんは川へせんたくにいきました。" +
+             "あるひ、おばあさんが川でせんたくをしていると、大きなももがながれてきました。";
+
+  var text = TEXT;
+  var winSize = 32;
+  var minMatch = 3;
+  var pos = 1;
+  var tokens = [];
+  var windowStart = 0;
+  var matchLen = 0;
+  var matchDist = 0;
+  var matchSrc = -1;
+  var auto = false;
+  var lastStep = 0;
+
+  var CH = 12;
+  var CW = 20;
+  var LINES = 10;
+  var CHARS_PER_LINE = 56;
+  var TX = 24, TY = 56;
+
+  function reset() {
+    pos = 1;
+    tokens = [];
+    matchLen = 0;
+    matchDist = 0;
+    matchSrc = -1;
+    auto = false;
+    document.getElementById("auto").textContent = "自動";
+  }
+
+  function longestMatch() {
+    var best = 0, bestDist = 0, bestSrc = -1;
+    var start = Math.max(0, pos - winSize);
+    var maxLen = Math.min(24, text.length - pos);
+
+    for (var d = 1; d <= pos - start; d++) {
+      var src = pos - d;
+      var l = 0;
+      while (l < maxLen && text[src + l] === text[pos + l]) l++;
+      if (l > best) { best = l; bestDist = d; bestSrc = src; }
+    }
+    return { len: best, dist: bestDist, src: bestSrc };
+  }
+
+  function step() {
+    if (pos >= text.length) return;
+    var m = longestMatch();
+
+    if (m.len >= minMatch) {
+      tokens.push({ type: "match", dist: m.dist, len: m.len });
+      matchLen = m.len; matchDist = m.dist; matchSrc = m.src;
+      pos += m.len;
+    } else {
+      tokens.push({ type: "lit", ch: text[pos] });
+      matchLen = 0; matchDist = 0; matchSrc = -1;
+      pos += 1;
+    }
+    if (pos >= text.length) { auto = false; }
+  }
+
+  function charPos(i) {
+    var line = Math.floor(i / CHARS_PER_LINE);
+    var col = i % CHARS_PER_LINE;
+    return { x: TX + col * CH, y: TY + line * CW };
+  }
+
+  function draw() {
+    ctx.fillStyle = "#03050a";
+    ctx.fillRect(0, 0, W, H);
+
+    var start = Math.max(0, pos - winSize);
+    var end = Math.min(text.length, pos + 24);
+
+    // 行の背景
+    ctx.font = '600 12.5px "Hiragino Sans","Yu Gothic",system-ui,sans-serif';
+    ctx.textBaseline = "alphabetic";
+
+    for (var i = 0; i < text.length; i++) {
+      var p = charPos(i);
+      if (p.y > TY + LINES * CW) break;
+
+      var inWindow = i >= start && i < pos;
+      var inLook = i >= pos && i < end;
+      var inSrc = matchSrc >= 0 && i >= matchSrc && i < matchSrc + matchLen;
+      var isCur = i === pos;
+
+      if (inSrc) {
+        ctx.fillStyle = "rgba(103,232,249,.22)";
+        ctx.fillRect(p.x - 1, p.y - 15, CH + 1, 19);
+      } else if (isCur) {
+        ctx.fillStyle = "rgba(251,191,36,.30)";
+        ctx.fillRect(p.x - 1, p.y - 15, CH + 1, 19);
+      } else if (inWindow) {
+        ctx.fillStyle = "rgba(233,239,248,.07)";
+        ctx.fillRect(p.x - 1, p.y - 15, CH + 1, 19);
+      }
+
+      var ch = text[i];
+      if (inSrc) ctx.fillStyle = "#a5f3fc";
+      else if (isCur) ctx.fillStyle = "#fde68a";
+      else if (inLook) ctx.fillStyle = "rgba(233,239,248,.85)";
+      else if (inWindow) ctx.fillStyle = "rgba(233,239,248,.55)";
+      else ctx.fillStyle = "rgba(233,239,248,.28)";
+
+      ctx.fillText(ch, p.x, p.y);
+    }
+
+    // 枠
+    ctx.strokeStyle = "rgba(233,239,248,.08)";
+    ctx.strokeRect(TX - 6, TY - 24, W - 2 * TX + 12, LINES * CW + 16);
+
+    // 現在の一致
+    var infoY = TY + LINES * CW + 34;
+    ctx.font = '700 13px "Hiragino Sans","Yu Gothic",system-ui,sans-serif';
+    if (matchLen > 0) {
+      ctx.fillStyle = "#67e8f9";
+      ctx.fillText("一致: " + matchDist + " 文字前から " + matchLen + " 文字", TX, infoY);
+    } else if (pos < text.length) {
+      ctx.fillStyle = "rgba(233,239,248,.5)";
+      ctx.fillText("一致なし → 1文字そのまま", TX, infoY);
+    } else {
+      ctx.fillStyle = "#86efac";
+      ctx.fillText("完了", TX, infoY);
+    }
+
+    // トークン列
+    var tx = TX, ty = infoY + 26;
+    var shown = Math.min(tokens.length, 22);
+    ctx.font = '700 12px ui-monospace,Menlo,Consolas,monospace';
+    for (var k = tokens.length - shown; k < tokens.length; k++) {
+      var t = tokens[k];
+      var label = t.type === "match" ? "(" + t.dist + "," + t.len + ")" : "'" + t.ch + "'";
+      var w = ctx.measureText(label).width + 10;
+      if (tx + w > W - TX) { tx = TX; ty += 24; }
+      ctx.fillStyle = t.type === "match" ? "rgba(103,232,249,.18)" : "rgba(233,239,248,.08)";
+      ctx.fillRect(tx, ty - 14, w, 18);
+      ctx.fillStyle = t.type === "match" ? "#a5f3fc" : "rgba(233,239,248,.7)";
+      ctx.fillText(label, tx + 5, ty);
+      tx += w + 6;
+    }
+
+    // 進捗バー
+    var barY = H - 18;
+    ctx.fillStyle = "rgba(233,239,248,.08)";
+    ctx.fillRect(TX, barY, W - 2 * TX, 6);
+    ctx.fillStyle = "#67e8f9";
+    ctx.fillRect(TX, barY, (W - 2 * TX) * (pos / text.length), 6);
+
+    posEl.textContent = pos + "/" + text.length;
+    tokEl.textContent = String(tokens.length);
+    ratioEl.textContent = (tokens.length / Math.max(1, pos)).toFixed(2);
+  }
+
+  var frames = 0, fpsTimer = 0, smooth = 0;
+  function loop(now) {
+    if (!fpsTimer) fpsTimer = now;
+
+    var t0 = performance.now();
+    if (auto && now - lastStep > 220) {
+      step();
+      lastStep = now;
+    }
+    draw();
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      msEl.textContent = smooth.toFixed(1) + " ms";
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  winEl.addEventListener("input", function () { winSize = Number(winEl.value); winVal.textContent = String(winSize); });
+  minmEl.addEventListener("input", function () { minMatch = Number(minmEl.value); minmVal.textContent = String(minMatch); });
+
+  document.getElementById("step").addEventListener("click", function () { auto = false; step(); });
+  document.getElementById("auto").addEventListener("click", function () {
+    auto = !auto;
+    this.textContent = auto ? "停止" : "自動";
+    lastStep = 0;
+  });
+  document.getElementById("reset").addEventListener("click", reset);
+
+  reset();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
