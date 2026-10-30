@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ワープ — 星が、線になる。</title>
+<meta name="description" content="擬似3Dの星屑ワープ。星を透視投影して、速度に応じて線を引くと、宇宙を飛んでいるように見えます。">
+<meta property="og:title" content="ワープ — 星が、線になる。">
+<meta property="og:description" content="遠近法で投影して、前の位置と線で結ぶ。それだけでワープに見えます。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/starfield-warp/">
+<meta property="og:site_name" content="ワープ">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#04050a">
+<style>
+  :root{
+    --bg:#04050a;
+    --panel:#0b1018;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --cyan:#67e8f9;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #0d2438 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #1a1630 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:720px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--cyan);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.5rem,5.6vw,2rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#02040a;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+  #view{display:block;width:100%;height:auto}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:108px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--cyan);min-width:0;cursor:pointer}
+  .row output{width:64px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0b1018;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--cyan)}
+  .actions button:focus-visible{outline:3px solid var(--cyan);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">PSEUDO-3D STARFIELD</p>
+      <h1>ワープ</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0 個の星</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="view" width="640" height="480" role="img" aria-label="星が流れるワープ空間"></canvas>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="count">星の数</label><input id="count" type="range" min="120" max="900" step="20" value="520"><output id="countVal">520</output></div>
+    <div class="row"><label for="speed">ワープ速度</label><input id="speed" type="range" min="0.1" max="2.4" step="0.05" value="0.9"><output id="speedVal">0.90</output></div>
+    <div class="row"><label for="fov">視野</label><input id="fov" type="range" min="200" max="640" step="10" value="380"><output id="fovVal">380</output></div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="pause">停止</button>
+    <button type="button" id="reset">やり直す</button>
+  </div>
+
+  <p class="note">
+    <b>星を (x, y, z) で持って、奥行き z で割って投影する</b>（透視投影）。前フレームの投影位置と線でつなぐと、速度に応じた筋になります。
+    z が 0 に近づいたらカメラの横を通り過ぎたので、奥に戻します。中心ほど速く流れるのがそれらしく見える理由です。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 640, H = 480;
+  var canvas = document.getElementById("view");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var countEl = document.getElementById("count");
+  var speedEl = document.getElementById("speed");
+  var fovEl = document.getElementById("fov");
+  var countVal = document.getElementById("countVal");
+  var speedVal = document.getElementById("speedVal");
+  var fovVal = document.getElementById("fovVal");
+
+  var MAX = 900;
+  var N = 520;
+  var speed = 0.9;
+  var fov = 380;
+  var stars = [];
+  var running = true;
+
+  function reset() {
+    stars = [];
+    for (var i = 0; i < MAX; i++) {
+      stars.push({
+        x: (Math.random() * 2 - 1) * 1.2,
+        y: (Math.random() * 2 - 1) * 1.2,
+        z: Math.random() * 0.95 + 0.05
+      });
+    }
+  }
+
+  function draw() {
+    // 残像で筋を残す
+    ctx.fillStyle = "rgba(2,4,10,0.30)";
+    ctx.fillRect(0, 0, W, H);
+
+    var cx = W / 2, cy = H / 2;
+    var dt = 1;
+
+    for (var i = 0; i < N; i++) {
+      var s = stars[i];
+      var pz = s.z;
+      s.z -= speed * 0.012 * dt;
+
+      if (s.z <= 0.02) {
+        s.x = (Math.random() * 2 - 1) * 1.2;
+        s.y = (Math.random() * 2 - 1) * 1.2;
+        s.z = 1.0;
+        continue;
+      }
+
+      var sx = cx + (s.x / s.z) * fov;
+      var sy = cy + (s.y / s.z) * fov;
+      var px = cx + (s.x / pz) * fov;
+      var py = cy + (s.y / pz) * fov;
+
+      if (sx < -50 || sx > W + 50 || sy < -50 || sy > H + 50) continue;
+
+      var t = 1 - s.z;               // 手前ほど 1
+      var alpha = Math.min(1, 0.15 + t * 1.1);
+      var hue = 195 + (1 - t) * 40;
+
+      ctx.strokeStyle = "hsla(" + hue.toFixed(0) + ",90%," + (70 + t * 20).toFixed(0) + "%," + alpha.toFixed(2) + ")";
+      ctx.lineWidth = 0.6 + t * 2.4;
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      ctx.lineTo(sx, sy);
+      ctx.stroke();
+    }
+
+    // 中心の淡い光
+    var g = ctx.createRadialGradient(cx, cy, 0, cx, cy, 120);
+    g.addColorStop(0, "rgba(103,232,249,0.10)");
+    g.addColorStop(1, "rgba(103,232,249,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(cx - 120, cy - 120, 240, 240);
+
+    msEl.textContent = String(N) + " 個の星";
+  }
+
+  var frames = 0, fpsTimer = 0, smooth = 0;
+  function loop(now) {
+    if (!fpsTimer) fpsTimer = now;
+    var t0 = performance.now();
+    if (running) draw();
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  countEl.addEventListener("input", function () { N = Number(countEl.value); countVal.textContent = String(N); });
+  speedEl.addEventListener("input", function () { speed = Number(speedEl.value); speedVal.textContent = speed.toFixed(2); });
+  fovEl.addEventListener("input", function () { fov = Number(fovEl.value); fovVal.textContent = String(fov); });
+
+  document.getElementById("pause").addEventListener("click", function () {
+    running = !running;
+    this.textContent = running ? "停止" : "再開";
+  });
+  document.getElementById("reset").addEventListener("click", reset);
+
+  reset();
+  ctx.fillStyle = "#02040a";
+  ctx.fillRect(0, 0, W, H);
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
