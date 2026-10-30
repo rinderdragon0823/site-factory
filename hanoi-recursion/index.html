@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ハノイの塔 — 再帰は、こう動く。</title>
+<meta name="description" content="ハノイの塔の再帰を可視化。n枚を別の柱へ移す手順が、再帰呼び出しの順に実行されていきます。">
+<meta property="og:title" content="ハノイの塔 — 再帰は、こう動く。">
+<meta property="og:description" content="n枚を移すには、n−1枚をどけて、1枚動かして、n−1枚を戻す。それだけです。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/hanoi-recursion/">
+<meta property="og:site_name" content="ハノイの塔">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --amber:#fbbf24;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #2a2110 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #141a33 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:760px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--amber);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.4rem,5.2vw,1.9rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+  #view{display:block;width:100%;height:auto}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:108px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--amber);min-width:0;cursor:pointer}
+  .row output{width:64px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .readout{display:flex;gap:16px;flex-wrap:wrap;margin-top:6px;font-size:10.5px;color:var(--muted)}
+  .readout b{color:var(--ink);font-variant-numeric:tabular-nums;font-size:12.5px}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0c1119;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--amber)}
+  .actions button:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">TOWER OF HANOI / RECURSION</p>
+      <h1>ハノイの塔</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0 ms</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="view" width="720" height="420" role="img" aria-label="ハノイの塔"></canvas>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="disks">円盤の数</label><input id="disks" type="range" min="3" max="8" step="1" value="5"><output id="disksVal">5</output></div>
+    <div class="row"><label for="speed">1手の間隔</label><input id="speed" type="range" min="60" max="700" step="20" value="120"><output id="speedVal">120ms</output></div>
+    <div class="readout">
+      <span>手数 <b id="moves">0</b></span>
+      <span>最短 <b id="best">31</b></span>
+      <span>状態 <b id="state">解いています</b></span>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="pause">停止</button>
+    <button type="button" id="reset">やり直す</button>
+  </div>
+
+  <p class="note">
+    <b>n枚を移すには、上のn−1枚を空き柱へ移し、いちばん下を目的の柱へ置き、n−1枚をその上に移す</b>。この3手順を再帰で繰り返すと、最短 2ⁿ−1 手で完成します。
+    動いている円盤の色が、いま処理している再帰の深さです。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 720, H = 420;
+  var canvas = document.getElementById("view");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var movesEl = document.getElementById("moves");
+  var bestEl = document.getElementById("best");
+  var stateEl = document.getElementById("state");
+  var disksEl = document.getElementById("disks");
+  var speedEl = document.getElementById("speed");
+  var disksVal = document.getElementById("disksVal");
+  var speedVal = document.getElementById("speedVal");
+
+  var N = 5;
+  var pegs = [[], [], []];
+  var moves = [];
+  var moveIdx = 0;
+  var done = 0;
+  var running = true;
+  var interval = 120;
+  var lastMove = 0;
+  var moving = null;
+  var animStart = 0;
+
+  var BASE_Y = H - 52;
+  var PEG_X = [W * 0.2, W * 0.5, W * 0.8];
+  var DISK_H = 22;
+
+  function solve(n, from, to, via) {
+    if (n === 0) return;
+    solve(n - 1, from, via, to);
+    moves.push({ from: from, to: to, size: n });
+    solve(n - 1, via, to, from);
+  }
+
+  function reset() {
+    N = Number(disksEl.value);
+    pegs = [[], [], []];
+    for (var i = N; i >= 1; i--) pegs[0].push(i);
+    moves = [];
+    solve(N, 0, 2, 1);
+    moveIdx = 0;
+    done = 0;
+    running = true;
+    moving = null;
+    lastMove = 0;
+    bestEl.textContent = String(moves.length);
+    stateEl.textContent = "解いています";
+    document.getElementById("pause").textContent = "停止";
+  }
+
+  function colorFor(size) {
+    var hue = 35 + (size / Math.max(1, N)) * 260;
+    return "hsl(" + hue.toFixed(0) + ",72%,58%)";
+  }
+
+  function draw() {
+    ctx.fillStyle = "#03050a";
+    ctx.fillRect(0, 0, W, H);
+
+    // 床
+    ctx.fillStyle = "rgba(233,239,248,.10)";
+    ctx.fillRect(40, BASE_Y + 8, W - 80, 4);
+
+    // 柱
+    for (var p = 0; p < 3; p++) {
+      ctx.fillStyle = "rgba(233,239,248,.18)";
+      ctx.fillRect(PEG_X[p] - 3, 60, 6, BASE_Y - 52);
+      ctx.fillStyle = "rgba(233,239,248,.45)";
+      ctx.font = '700 11px "Hiragino Sans","Yu Gothic",system-ui,sans-serif';
+      ctx.textAlign = "center";
+      ctx.fillText(String.fromCharCode(65 + p), PEG_X[p], BASE_Y + 30);
+    }
+    ctx.textAlign = "left";
+
+    // 円盤
+    for (var q = 0; q < 3; q++) {
+      for (var d = 0; d < pegs[q].length; d++) {
+        var size = pegs[q][d];
+        drawDisk(PEG_X[q], BASE_Y - d * DISK_H, size, colorFor(size));
+      }
+    }
+
+    // 移動中
+    if (moving) {
+      var t = Math.min(1, (performance.now() - animStart) / 190);
+      var e = 1 - Math.pow(1 - t, 3);
+      var x0 = PEG_X[moving.from], x1 = PEG_X[moving.to];
+      var lift = Math.sin(Math.PI * e) * 60;
+      var x = x0 + (x1 - x0) * e;
+      var y = BASE_Y - (pegs[moving.from].length - 0) * DISK_H - lift;
+      drawDisk(x, y, moving.size, colorFor(moving.size));
+    }
+
+    movesEl.textContent = String(done);
+    if (done >= moves.length && moveIdx >= moves.length) {
+      stateEl.textContent = "完成";
+    }
+  }
+
+  function drawDisk(cx, baseY, size, color) {
+    var w = 34 + size * (W * 0.55) / Math.max(4, N * 9);
+    var x = cx - w / 2;
+    var y = baseY - DISK_H;
+    ctx.fillStyle = color;
+    ctx.strokeStyle = "rgba(3,5,10,.5)";
+    ctx.lineWidth = 1.5;
+    if (ctx.roundRect) {
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, DISK_H - 3, 6);
+      ctx.fill();
+      ctx.stroke();
+    } else {
+      ctx.fillRect(x, y, w, DISK_H - 3);
+      ctx.strokeRect(x + 0.5, y + 0.5, w - 1, DISK_H - 4);
+    }
+  }
+
+  function applyMove(m) {
+    var fromPeg = pegs[m.from];
+    var disk = fromPeg.pop();
+    pegs[m.to].push(disk);
+    done++;
+  }
+
+  var frames = 0, fpsTimer = 0, smooth = 0;
+  function loop(now) {
+    if (!fpsTimer) fpsTimer = now;
+
+    var t0 = performance.now();
+
+    if (running && moveIdx < moves.length) {
+      if (!lastMove) lastMove = now;
+      if (now - lastMove > interval) {
+        var m = moves[moveIdx];
+        applyMove(m);
+        moveIdx++;
+        lastMove = now;
+      }
+    }
+
+    draw();
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      msEl.textContent = smooth.toFixed(1) + " ms";
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  disksEl.addEventListener("input", function () {
+    disksVal.textContent = disksEl.value;
+    reset();
+  });
+  speedEl.addEventListener("input", function () {
+    interval = Number(speedEl.value);
+    speedVal.textContent = interval + "ms";
+  });
+
+  document.getElementById("pause").addEventListener("click", function () {
+    running = !running;
+    this.textContent = running ? "停止" : "再開";
+    stateEl.textContent = running ? "解いています" : "停止中";
+  });
+  document.getElementById("reset").addEventListener("click", reset);
+
+  reset();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
