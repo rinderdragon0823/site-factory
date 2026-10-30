@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ボロノイ — 一番近い点の、縄張り。</title>
+<meta name="description" content="ボロノイ図の可視化。点を動かすと、一番近い点の領域が変わり、境界線が動きます。">
+<meta property="og:title" content="ボロノイ — 一番近い点の、縄張り。">
+<meta property="og:description" content="各画素を一番近い点に割り当てる。それだけで、蜂の巣のような模様になります。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/voronoi-cells/">
+<meta property="og:site_name" content="ボロノイ">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --mint:#6ee7b7;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #0f2a26 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #1a1430 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:760px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--mint);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.4rem,5.2vw,1.9rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{position:relative;margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55);touch-action:none}
+  #view{display:block;width:100%;height:auto;cursor:crosshair}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:108px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--mint);min-width:0;cursor:pointer}
+  .row output{width:64px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0c1119;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--mint)}
+  .actions button:focus-visible{outline:3px solid var(--mint);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">VORONOI</p>
+      <h1>ボロノイ</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms / 66,000 px</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="view" width="300" height="220" role="img" aria-label="ボロノイ図"></canvas>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="n">点の数</label><input id="n" type="range" min="6" max="48" step="1" value="26"><output id="nVal">26</output></div>
+    <div class="row"><label for="speed">動く速さ</label><input id="speed" type="range" min="0" max="1.5" step="0.05" value="0.5"><output id="speedVal">0.50</output></div>
+    <div class="row"><label for="border">境界の太さ</label><input id="border" type="range" min="0" max="6" step="0.5" value="1.5"><output id="borderVal">1.5</output></div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="reset">散らし直す</button>
+  </div>
+
+  <p class="note">
+    <b>各画素を、いちばん近い点の色で塗る</b>だけ。それだけで領域に分かれます。境界は「1番近い距離と2番目に近い距離の差」が小さい場所です。
+    点はゆっくり動いているので、境界線が生き物みたいに動きます。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 300, H = 220;
+  var canvas = document.getElementById("view");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var img = ctx.createImageData(W, H);
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var nEl = document.getElementById("n");
+  var speedEl = document.getElementById("speed");
+  var borderEl = document.getElementById("border");
+  var nVal = document.getElementById("nVal");
+  var speedVal = document.getElementById("speedVal");
+  var borderVal = document.getElementById("borderVal");
+
+  var MAX = 48;
+  var N = 26;
+  var speed = 0.5;
+  var borderW = 1.5;
+  var pts = [];
+
+  function reset() {
+    pts = [];
+    for (var i = 0; i < MAX; i++) {
+      pts.push({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        vx: (Math.random() - 0.5) * 2,
+        vy: (Math.random() - 0.5) * 2,
+        hue: (i * 360 / MAX + Math.random() * 12) % 360
+      });
+    }
+  }
+
+  function step(dt) {
+    for (var i = 0; i < N; i++) {
+      var p = pts[i];
+      p.x += p.vx * speed * dt * 60;
+      p.y += p.vy * speed * dt * 60;
+      if (p.x < 4) { p.x = 4; p.vx = Math.abs(p.vx); }
+      if (p.x > W - 4) { p.x = W - 4; p.vx = -Math.abs(p.vx); }
+      if (p.y < 4) { p.y = 4; p.vy = Math.abs(p.vy); }
+      if (p.y > H - 4) { p.y = H - 4; p.vy = -Math.abs(p.vy); }
+    }
+  }
+
+  function render() {
+    var d = img.data;
+    var p = 0;
+    var bw = borderW;
+
+    for (var y = 0; y < H; y++) {
+      for (var x = 0; x < W; x++) {
+        var d1 = 1e9, d2 = 1e9, best = 0;
+        for (var i = 0; i < N; i++) {
+          var dx = pts[i].x - x;
+          var dy = pts[i].y - y;
+          var dist = dx * dx + dy * dy;
+          if (dist < d1) {
+            d2 = d1; d1 = dist; best = i;
+          } else if (dist < d2) {
+            d2 = dist;
+          }
+        }
+
+        var col;
+        if (bw > 0 && (Math.sqrt(d2) - Math.sqrt(d1)) < bw) {
+          d[p] = 6; d[p + 1] = 8; d[p + 2] = 14;
+        } else {
+          var hue = pts[best].hue;
+          var light = 32 + (best % 5) * 5;
+          col = hsl(hue, 62, light);
+          d[p] = col[0]; d[p + 1] = col[1]; d[p + 2] = col[2];
+        }
+        d[p + 3] = 255;
+        p += 4;
+      }
+    }
+
+    ctx.putImageData(img, 0, 0);
+
+    // 点
+    for (var k = 0; k < N; k++) {
+      ctx.fillStyle = "rgba(255,255,255,.85)";
+      ctx.beginPath();
+      ctx.arc(pts[k].x, pts[k].y, 1.4, 0, 6.283);
+      ctx.fill();
+    }
+  }
+
+  function hsl(h, s, l) {
+    var c = (1 - Math.abs(2 * l / 100 - 1)) * s / 100;
+    var hp = h / 60;
+    var x = c * (1 - Math.abs(hp % 2 - 1));
+    var r = 0, g = 0, b = 0;
+    if (hp < 1) { r = c; g = x; }
+    else if (hp < 2) { r = x; g = c; }
+    else if (hp < 3) { g = c; b = x; }
+    else if (hp < 4) { g = x; b = c; }
+    else if (hp < 5) { r = x; b = c; }
+    else { r = c; b = x; }
+    var m = l / 100 - c / 2;
+    return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
+  }
+
+  var last = 0, frames = 0, fpsTimer = 0, smooth = 0;
+  function loop(now) {
+    if (!fpsTimer) { fpsTimer = now; last = now; }
+    var dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+
+    var t0 = performance.now();
+    step(dt);
+    render();
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      msEl.textContent = smooth.toFixed(1) + " ms / " + (W * H).toLocaleString("en-US") + " px";
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  nEl.addEventListener("input", function () { N = Number(nEl.value); nVal.textContent = String(N); });
+  speedEl.addEventListener("input", function () { speed = Number(speedEl.value); speedVal.textContent = speed.toFixed(2); });
+  borderEl.addEventListener("input", function () { borderW = Number(borderEl.value); borderVal.textContent = borderW.toFixed(1); });
+
+  document.getElementById("reset").addEventListener("click", reset);
+
+  canvas.addEventListener("pointerdown", function (e) {
+    var rect = canvas.getBoundingClientRect();
+    var x = (e.clientX - rect.left) / rect.width * W;
+    var y = (e.clientY - rect.top) / rect.height * H;
+    if (N < MAX) {
+      pts[N].x = x;
+      pts[N].y = y;
+      pts[N].vx = (Math.random() - 0.5) * 2;
+      pts[N].vy = (Math.random() - 0.5) * 2;
+      N++;
+      nEl.value = String(N);
+      nVal.textContent = String(N);
+    }
+  });
+
+  reset();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
