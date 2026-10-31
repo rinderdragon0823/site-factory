@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>万華鏡 — 1つの扇を、鏡で増やす。</title>
+<meta name="description" content="万華鏡の仕組みを可視化。1つの扇に描いた模様を、回転と鏡映で増やして円対称の模様にします。">
+<meta property="og:title" content="万華鏡 — 1つの扇を、鏡で増やす。">
+<meta property="og:description" content="扇を1つ描いて、回して、鏡で反転する。それだけで万華鏡になります。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/kaleidoscope/">
+<meta property="og:site_name" content="万華鏡">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --pink:#f9a8d4;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #2a1430 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #101a33 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:680px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--pink);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.5rem,5.6vw,2rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+  #view{display:block;width:100%;height:auto;background:#03050a}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:108px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--pink);min-width:0;cursor:pointer}
+  .row output{width:60px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0c1119;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--pink)}
+  .actions button:focus-visible{outline:3px solid var(--pink);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">KALEIDOSCOPE / MIRROR SYMMETRY</p>
+      <h1>万華鏡</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="view" width="600" height="600" role="img" aria-label="万華鏡の模様"></canvas>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="segs">分割数</label><input id="segs" type="range" min="4" max="16" step="1" value="8"><output id="segsVal">8</output></div>
+    <div class="row"><label for="spin">回転の速さ</label><input id="spin" type="range" min="0" max="1.2" step="0.02" value="0.25"><output id="spinVal">0.25</output></div>
+    <div class="row"><label for="parts">粒の数</label><input id="parts" type="range" min="6" max="80" step="2" value="34"><output id="partsVal">34</output></div>
+    <div class="row"><label for="zoom">ズーム</label><input id="zoom" type="range" min="0.5" max="1.8" step="0.05" value="1.05"><output id="zoomVal">1.05</output></div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="shuffle">模様を変える</button>
+  </div>
+
+  <p class="note">
+    <b>扇型に1つだけ模様を描いて、それを回転コピーし、1枚おきに鏡で反転する</b>。これだけで、円対称で折り返しのある模様になります。
+    本物の鏡の万華鏡と同じ原理です。粒は扇の中でゆっくり動いています。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var S = 600;
+  var canvas = document.getElementById("view");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var segsEl = document.getElementById("segs");
+  var spinEl = document.getElementById("spin");
+  var partsEl = document.getElementById("parts");
+  var zoomEl = document.getElementById("zoom");
+  var segsVal = document.getElementById("segsVal");
+  var spinVal = document.getElementById("spinVal");
+  var partsVal = document.getElementById("partsVal");
+  var zoomVal = document.getElementById("zoomVal");
+
+  // 扇を描くための下地
+  var base = document.createElement("canvas");
+  base.width = S;
+  base.height = S;
+  var bctx = base.getContext("2d");
+
+  var segs = 8;
+  var spin = 0.25;
+  var nParts = 34;
+  var zoom = 1.05;
+  var angle = 0;
+  var t = 0;
+
+  var parts = [];
+  var MAX = 80;
+
+  function shuffle() {
+    parts = [];
+    for (var i = 0; i < MAX; i++) {
+      parts.push({
+        a: Math.random() * 0.6 + 0.05,
+        r: Math.random() * 0.9 + 0.1,
+        va: (Math.random() - 0.5) * 0.25,
+        vr: (Math.random() - 0.5) * 0.06,
+        size: 6 + Math.random() * 22,
+        hue: Math.random() * 360
+      });
+    }
+  }
+
+  function drawBase() {
+    bctx.clearRect(0, 0, S, S);
+    
+
+    var cx = S / 2, cy = S / 2;
+    var R = S * 0.48;
+    var wedge = Math.PI / segs;
+
+    bctx.save();
+    bctx.beginPath();
+    bctx.moveTo(cx, cy);
+    bctx.arc(cx, cy, R * 1.4, -wedge / 2, wedge / 2);
+    bctx.closePath();
+    bctx.clip();
+
+    for (var i = 0; i < nParts; i++) {
+      var p = parts[i];
+      var ang = (p.a - 0.5) * wedge;
+      var rr = p.r * R;
+      var x = cx + Math.cos(ang) * rr;
+      var y = cy + Math.sin(ang) * rr;
+
+      var hue = (p.hue + t * 8) % 360;
+      var g = bctx.createRadialGradient(x, y, 0, x, y, p.size * 2.2);
+      g.addColorStop(0, "hsla(" + hue.toFixed(0) + ",90%,72%,0.85)");
+      g.addColorStop(1, "hsla(" + hue.toFixed(0) + ",90%,55%,0)");
+      bctx.fillStyle = g;
+      bctx.beginPath();
+      bctx.arc(x, y, p.size * 2.2, 0, 6.283);
+      bctx.fill();
+    }
+    bctx.restore();
+  }
+
+  function step(dt) {
+    var wedge = Math.PI / segs;
+    for (var i = 0; i < nParts; i++) {
+      var p = parts[i];
+      p.a += p.va * dt;
+      p.r += p.vr * dt;
+      if (p.a < 0.02) { p.a = 0.02; p.va = Math.abs(p.va); }
+      if (p.a > 0.98) { p.a = 0.98; p.va = -Math.abs(p.va); }
+      if (p.r < 0.08) { p.r = 0.08; p.vr = Math.abs(p.vr); }
+      if (p.r > 0.98) { p.r = 0.98; p.vr = -Math.abs(p.vr); }
+    }
+    angle += spin * dt * 0.5;
+    t += dt;
+  }
+
+  function render() {
+    ctx.fillStyle = "#03050a";
+    ctx.fillRect(0, 0, S, S);
+
+    var cx = S / 2, cy = S / 2;
+    var wedge = Math.PI / segs;
+
+    for (var i = 0; i < segs * 2; i++) {
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(angle + Math.floor(i / 2) * wedge * 2 + (i % 2 ? wedge : 0));
+      ctx.scale(zoom, zoom);
+      if (i % 2 === 1) ctx.scale(-1, 1);
+      ctx.drawImage(base, -cx, -cy);
+      ctx.restore();
+    }
+
+    // 中心の光
+    var g = ctx.createRadialGradient(cx, cy, 0, cx, cy, S * 0.12);
+    g.addColorStop(0, "rgba(255,255,255,0.55)");
+    g.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(cx, cy, S * 0.12, 0, 6.283);
+    ctx.fill();
+  }
+
+  var last = 0, frames = 0, fpsTimer = 0, smooth = 0;
+  function loop(now) {
+    if (!fpsTimer) { fpsTimer = now; last = now; }
+    var dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+
+    var t0 = performance.now();
+    step(dt);
+    drawBase();
+    render();
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      msEl.textContent = smooth.toFixed(1) + " ms";
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  segsEl.addEventListener("input", function () { segs = Number(segsEl.value); segsVal.textContent = String(segs); });
+  spinEl.addEventListener("input", function () { spin = Number(spinEl.value); spinVal.textContent = spin.toFixed(2); });
+  partsEl.addEventListener("input", function () { nParts = Number(partsEl.value); partsVal.textContent = String(nParts); });
+  zoomEl.addEventListener("input", function () { zoom = Number(zoomEl.value); zoomVal.textContent = zoom.toFixed(2); });
+  document.getElementById("shuffle").addEventListener("click", shuffle);
+
+  shuffle();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
