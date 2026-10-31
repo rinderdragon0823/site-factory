@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>等高線 — 同じ高さを、線で結ぶ。</title>
+<meta name="description" content="マーチングスクエアで等高線を描く技術デモ。波打つ場の中に、同じ値の線が浮かび上がります。">
+<meta property="og:title" content="等高線 — 同じ高さを、線で結ぶ。">
+<meta property="og:description" content="マス目の4隅の値を比べて、線が通る場所を補間する。それだけで等高線が引けます。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/contour-lines/">
+<meta property="og:site_name" content="等高線">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --mint:#6ee7b7;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #10281e 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #141a33 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:760px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--mint);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.4rem,5.2vw,1.9rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+  #view{display:block;width:100%;height:auto}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:112px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--mint);min-width:0;cursor:pointer}
+  .row output{width:64px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0c1119;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--mint)}
+  .actions button:focus-visible{outline:3px solid var(--mint);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">MARCHING SQUARES</p>
+      <h1>等高線</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms / 0 本</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="view" width="640" height="480" role="img" aria-label="等高線の模様"></canvas>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="levels">等高線の数</label><input id="levels" type="range" min="4" max="24" step="1" value="12"><output id="levelsVal">12</output></div>
+    <div class="row"><label for="freq">模様の細かさ</label><input id="freq" type="range" min="1.5" max="7" step="0.1" value="3.2"><output id="freqVal">3.2</output></div>
+    <div class="row"><label for="speed">動く速さ</label><input id="speed" type="range" min="0" max="1.6" step="0.05" value="0.5"><output id="speedVal">0.50</output></div>
+    <div class="row"><label for="cell">マス目の大きさ</label><input id="cell" type="range" min="6" max="16" step="1" value="8"><output id="cellVal">8</output></div>
+  </div>
+
+  <p class="note">
+    <b>マス目の4隅の値を比べて、等高線が通る辺を線形補間で求め、線で結ぶ</b>（マーチングスクエア）。値の場は3つの波を重ねたもので、
+    時間でゆっくり動いています。線が混み合うところが急斜面、広いところが緩やかな場所です。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 640, H = 480;
+  var canvas = document.getElementById("view");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var levelsEl = document.getElementById("levels");
+  var freqEl = document.getElementById("freq");
+  var speedEl = document.getElementById("speed");
+  var cellEl = document.getElementById("cell");
+  var levelsVal = document.getElementById("levelsVal");
+  var freqVal = document.getElementById("freqVal");
+  var speedVal = document.getElementById("speedVal");
+  var cellVal = document.getElementById("cellVal");
+
+  var nLevels = 12;
+  var freq = 3.2;
+  var speed = 0.5;
+  var cellSize = 8;
+  var t = 0;
+
+  function field(x, y, time) {
+    var u = x / W, v = y / H;
+    return (
+      Math.sin((u * freq + time * 0.6) * 6.283) * 0.5 +
+      Math.cos((v * freq * 1.3 - time * 0.4) * 6.283) * 0.35 +
+      Math.sin(((u + v) * freq * 0.7 + time * 0.9) * 6.283) * 0.25 +
+      Math.sin(Math.hypot(u - 0.5, v - 0.5) * freq * 12 - time * 1.5) * 0.2
+    );
+  }
+
+  function draw() {
+    ctx.fillStyle = "#03050a";
+    ctx.fillRect(0, 0, W, H);
+
+    var cols = Math.ceil(W / cellSize) + 1;
+    var rows = Math.ceil(H / cellSize) + 1;
+
+    var values = new Float32Array(cols * rows);
+    for (var j = 0; j < rows; j++) {
+      for (var i = 0; i < cols; i++) {
+        values[j * cols + i] = field(i * cellSize, j * cellSize, t);
+      }
+    }
+
+    var vmin = 1e9, vmax = -1e9;
+    for (var k = 0; k < values.length; k++) {
+      if (values[k] < vmin) vmin = values[k];
+      if (values[k] > vmax) vmax = values[k];
+    }
+
+    var segments = 0;
+
+    ctx.lineWidth = 1.1;
+
+    for (var L = 1; L < nLevels; L++) {
+      var lev = vmin + (vmax - vmin) * (L / nLevels);
+      var hue = 150 + (L / nLevels) * 120;
+
+      ctx.strokeStyle = "hsla(" + hue.toFixed(0) + ",80%," + (52 + (L % 2) * 12) + "%," + (0.55 + (L % 2) * 0.25) + ")";
+      ctx.beginPath();
+
+      for (var y = 0; y < rows - 1; y++) {
+        for (var x = 0; x < cols - 1; x++) {
+          var v00 = values[y * cols + x];
+          var v10 = values[y * cols + x + 1];
+          var v01 = values[(y + 1) * cols + x];
+          var v11 = values[(y + 1) * cols + x + 1];
+
+          var pts = [];
+
+          function edge(ax, ay, av, bx, by, bv) {
+            if ((av < lev && bv >= lev) || (av >= lev && bv < lev)) {
+              var f = (lev - av) / (bv - av);
+              pts.push([ax + (bx - ax) * f, ay + (by - ay) * f]);
+            }
+          }
+
+          var x0 = x * cellSize, y0 = y * cellSize;
+          edge(x0, y0, v00, x0 + cellSize, y0, v10);
+          edge(x0 + cellSize, y0, v10, x0 + cellSize, y0 + cellSize, v11);
+          edge(x0 + cellSize, y0 + cellSize, v11, x0, y0 + cellSize, v01);
+          edge(x0, y0 + cellSize, v01, x0, y0, v00);
+
+          if (pts.length === 2) {
+            ctx.moveTo(pts[0][0], pts[0][1]);
+            ctx.lineTo(pts[1][0], pts[1][1]);
+            segments++;
+          } else if (pts.length === 4) {
+            ctx.moveTo(pts[0][0], pts[0][1]);
+            ctx.lineTo(pts[1][0], pts[1][1]);
+            ctx.moveTo(pts[2][0], pts[2][1]);
+            ctx.lineTo(pts[3][0], pts[3][1]);
+            segments += 2;
+          }
+        }
+      }
+
+      ctx.stroke();
+    }
+
+    msEl.textContent = (draw.ms || 0).toFixed(1) + " ms / " + segments.toLocaleString("en-US") + " 本";
+  }
+
+  var last = 0, frames = 0, fpsTimer = 0;
+  function loop(now) {
+    if (!fpsTimer) { fpsTimer = now; last = now; }
+    var dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+
+    var t0 = performance.now();
+    t += dt * speed;
+    draw();
+    draw.ms = (draw.ms || 0) * 0.9 + (performance.now() - t0) * 0.1;
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  levelsEl.addEventListener("input", function () { nLevels = Number(levelsEl.value); levelsVal.textContent = String(nLevels); });
+  freqEl.addEventListener("input", function () { freq = Number(freqEl.value); freqVal.textContent = freq.toFixed(1); });
+  speedEl.addEventListener("input", function () { speed = Number(speedEl.value); speedVal.textContent = speed.toFixed(2); });
+  cellEl.addEventListener("input", function () { cellSize = Number(cellEl.value); cellVal.textContent = String(cellSize); });
+
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
