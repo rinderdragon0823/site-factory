@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>マンデルブロ — 境界には、いつまでも続く。</title>
+<meta name="description" content="マンデルブロ集合の探検。クリックで拡大し、自動ズームで境界の奥へ潜れます。">
+<meta property="og:title" content="マンデルブロ — 境界には、いつまでも続く。">
+<meta property="og:description" content="z → z² + c を繰り返すだけ。それだけで、無限に続く境界が生まれます。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/mandelbrot-zoom/">
+<meta property="og:site_name" content="マンデルブロ">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --gold:#fbbf24;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #2a2110 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #141a33 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:720px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--gold);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.35rem,5vw,1.85rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{position:relative;margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55);touch-action:none}
+  #view{display:block;width:100%;height:auto;cursor:crosshair}
+  .hint{position:absolute;left:10px;bottom:8px;font-size:10px;color:rgba(233,239,248,.45);pointer-events:none}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:108px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--gold);min-width:0;cursor:pointer}
+  .row output{width:64px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .readout{display:flex;gap:16px;flex-wrap:wrap;margin-top:6px;font-size:10.5px;color:var(--muted)}
+  .readout b{color:var(--ink);font-variant-numeric:tabular-nums;font-size:12.5px}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0c1119;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--gold)}
+  .actions button[aria-pressed="true"]{background:var(--gold);color:#231a04;border-color:var(--gold)}
+  .actions button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">MANDELBROT / ESCAPE TIME</p>
+      <h1>マンデルブロ</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="view" width="640" height="480" role="img" aria-label="マンデルブロ集合"></canvas>
+    <div class="hint">クリックで拡大</div>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="iter">最大反復</label><input id="iter" type="range" min="60" max="400" step="10" value="160"><output id="iterVal">160</output></div>
+    <div class="row"><label for="hue">色相</label><input id="hue" type="range" min="0" max="360" step="1" value="25"><output id="hueVal">25</output></div>
+    <div class="readout">
+      <span>中心 <b id="center">-0.5 + 0.0i</b></span>
+      <span>倍率 <b id="zoom">1.0×</b></span>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="auto" aria-pressed="true">自動ズーム</button>
+    <button type="button" id="reset">リセット</button>
+  </div>
+
+  <p class="note">
+    <b>z ← z² + c を、|z| が 2 を超えるまで繰り返す</b>。超えなかった点が集合（黒）。超えるまでの回数で色を決めています（エスケープタイム）。
+    境界のどこへ寄っても、同じような模様が現れ続けます。クリックした点へ寄っていきます。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 640, H = 480;
+  var RW = 400, RH = 300;
+  var canvas = document.getElementById("view");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var off = document.createElement("canvas");
+  off.width = RW;
+  off.height = RH;
+  var octx = off.getContext("2d");
+  var img = octx.createImageData(RW, RH);
+
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var centerEl = document.getElementById("center");
+  var zoomEl = document.getElementById("zoom");
+  var iterEl = document.getElementById("iter");
+  var hueEl = document.getElementById("hue");
+  var iterVal = document.getElementById("iterVal");
+  var hueVal = document.getElementById("hueVal");
+
+  var cx = -0.5, cy = 0.0;
+  var scale = 1.0;        // 1.0 = 全体（幅 3.0）
+  var maxIter = 160;
+  var hueBase = 25;
+  var autoZoom = true;
+
+  function hslToRgb(h, s, l) {
+    h = ((h % 360) + 360) % 360;
+    var c = (1 - Math.abs(2 * l / 100 - 1)) * s / 100;
+    var hp = h / 60;
+    var x = c * (1 - Math.abs(hp % 2 - 1));
+    var r = 0, g = 0, b = 0;
+    if (hp < 1) { r = c; g = x; }
+    else if (hp < 2) { r = x; g = c; }
+    else if (hp < 3) { g = c; b = x; }
+    else if (hp < 4) { g = x; b = c; }
+    else if (hp < 5) { r = x; b = c; }
+    else { r = c; b = x; }
+    var m = l / 100 - c / 2;
+    return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
+  }
+
+  function render() {
+    var d = img.data;
+    var p = 0;
+    var span = 3.0 * scale;
+    var x0 = cx - span / 2;
+    var y0 = cy - span * (RH / RW) / 2;
+    var dx = span / RW;
+    var dy = span * (RH / RW) / RH;
+
+    for (var py = 0; py < RH; py++) {
+      var ciY = y0 + py * dy;
+      for (var px = 0; px < RW; px++) {
+        var ciX = x0 + px * dx;
+
+        var zx = 0, zy = 0;
+        var n = 0;
+        while (zx * zx + zy * zy <= 4 && n < maxIter) {
+          var t = zx * zx - zy * zy + ciX;
+          zy = 2 * zx * zy + ciY;
+          zx = t;
+          n++;
+        }
+
+        if (n >= maxIter) {
+          d[p] = 4; d[p + 1] = 6; d[p + 2] = 12;
+        } else {
+          var mag = Math.sqrt(zx * zx + zy * zy);
+          var nu = n + 1 - Math.log(Math.log(mag + 1e-9) / Math.log(2)) / Math.log(2);
+          if (!isFinite(nu)) nu = n;
+          var hue = (hueBase + 40 * Math.sqrt(Math.max(0, nu))) % 360;
+          var light = 8 + 46 * Math.min(1, Math.sqrt(nu / maxIter));
+          var rgb = hslToRgb(hue, 82, Math.min(58, light));
+          d[p] = rgb[0]; d[p + 1] = rgb[1]; d[p + 2] = rgb[2];
+        }
+        d[p + 3] = 255;
+        p += 4;
+      }
+    }
+
+    octx.putImageData(img, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(off, 0, 0, W, H);
+  }
+
+  var frames = 0, fpsTimer = 0, smooth = 0;
+  function loop(now) {
+    if (!fpsTimer) fpsTimer = now;
+    var t0 = performance.now();
+
+    if (autoZoom && scale > 1e-9) {
+      scale *= 0.9965;
+    }
+    render();
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+
+    centerEl.textContent = cx.toFixed(6) + (cy >= 0 ? " + " : " − ") + Math.abs(cy).toFixed(6) + "i";
+    zoomEl.textContent = (1 / scale).toFixed(1) + "×";
+    msEl.textContent = smooth.toFixed(1) + " ms / " + RW + "×" + RH;
+    iterVal.textContent = String(maxIter);
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  canvas.addEventListener("pointerdown", function (e) {
+    var rect = canvas.getBoundingClientRect();
+    var u = (e.clientX - rect.left) / rect.width;
+    var v = (e.clientY - rect.top) / rect.height;
+
+    var span = 3.0 * scale;
+    var aspect = RH / RW;
+    var x0 = cx - span / 2;
+    var y0 = cy - span * aspect / 2;
+
+    cx = x0 + u * span;
+    cy = y0 + v * span * aspect;
+    scale *= 0.45;
+  });
+
+  document.getElementById("auto").addEventListener("click", function () {
+    autoZoom = !autoZoom;
+    this.setAttribute("aria-pressed", autoZoom ? "true" : "false");
+  });
+
+  document.getElementById("reset").addEventListener("click", function () {
+    cx = -0.5; cy = 0; scale = 1.0;
+  });
+
+  iterEl.addEventListener("input", function () { maxIter = Number(iterEl.value); iterVal.textContent = String(maxIter); });
+  hueEl.addEventListener("input", function () { hueBase = Number(hueEl.value); hueVal.textContent = String(hueBase); });
+
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
