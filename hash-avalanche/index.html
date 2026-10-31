@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>雪崩効果 — 1文字で、半分が変わる。</title>
+<meta name="description" content="SHA-256の雪崩効果を可視化。1文字変えるだけで、ハッシュのビットが半分ほど反転します。">
+<meta property="og:title" content="雪崩効果 — 1文字で、半分が変わる。">
+<meta property="og:description" content="入力が1ビット変わると、出力は半分のビットが変わる。それが暗号学的ハッシュです。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/hash-avalanche/">
+<meta property="og:site_name" content="雪崩効果">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --cyan:#67e8f9;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #0f2b33 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #1a1430 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:760px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--cyan);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.35rem,5vw,1.85rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+  #view{display:block;width:100%;height:auto}
+
+  .field{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap}
+  .field input{
+    flex:1 1 260px;min-width:0;font:inherit;font-size:13px;
+    color:var(--ink);background:#0c1119;border:1.5px solid var(--line);border-radius:10px;padding:11px 12px;
+  }
+  .field input:focus{outline:none;border-color:var(--cyan)}
+  .field button{
+    flex:0 0 auto;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0c1119;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px 14px;min-height:44px;cursor:pointer;
+  }
+  .field button:hover{border-color:var(--cyan)}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .readout{display:flex;gap:16px;flex-wrap:wrap;font-size:10.5px;color:var(--muted)}
+  .readout b{color:var(--ink);font-variant-numeric:tabular-nums;font-size:12.5px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">SHA-256 / AVALANCHE</p>
+      <h1>雪崩効果</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="view" width="720" height="380" role="img" aria-label="SHA-256のビット比較"></canvas>
+  </div>
+
+  <div class="field">
+    <input id="text" type="text" value="hello world" maxlength="24" aria-label="入力文字列">
+    <button type="button" id="shuffle">別の文字</button>
+  </div>
+
+  <div class="panel">
+    <div class="readout">
+      <span>反転したビット <b id="diff">0 / 256</b></span>
+      <span>割合 <b id="pct">0%</b></span>
+      <span>比べた文字列 <b id="variant">—</b></span>
+    </div>
+  </div>
+
+  <p class="note">
+    <b>1文字だけ変えた2つの文字列の SHA-256 を計算し、256ビットを並べて比べています</b>。赤い枠が「変わったビット」。
+    入力の違いがほんの少しでも、出力は半分ほど別物になります。これが雪崩効果です。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 720, H = 380;
+  var canvas = document.getElementById("view");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var input = document.getElementById("text");
+  var diffEl = document.getElementById("diff");
+  var pctEl = document.getElementById("pct");
+  var variantEl = document.getElementById("variant");
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+
+  var K = [
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+  ];
+
+  function sha256(str) {
+    var bytes = [];
+    for (var i = 0; i < str.length; i++) {
+      var c = str.charCodeAt(i);
+      if (c < 0x80) bytes.push(c);
+      else if (c < 0x800) bytes.push(0xc0 | (c >> 6), 0x80 | (c & 63));
+      else bytes.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+    }
+
+    var bitLen = bytes.length * 8;
+    bytes.push(0x80);
+    while (bytes.length % 64 !== 56) bytes.push(0);
+    bytes.push(0, 0, 0, 0);
+    bytes.push((bitLen >>> 24) & 255, (bitLen >>> 16) & 255, (bitLen >>> 8) & 255, bitLen & 255);
+
+    var H0 = 0x6a09e667, H1 = 0xbb67ae85, H2 = 0x3c6ef372, H3 = 0xa54ff53a;
+    var H4 = 0x510e527f, H5 = 0x9b05688c, H6 = 0x1f83d9ab, H7 = 0x5be0cd19;
+
+    var w = new Array(64);
+
+    for (var off = 0; off < bytes.length; off += 64) {
+      for (var t = 0; t < 16; t++) {
+        w[t] = (bytes[off + t * 4] << 24) | (bytes[off + t * 4 + 1] << 16) | (bytes[off + t * 4 + 2] << 8) | bytes[off + t * 4 + 3];
+      }
+      for (var t2 = 16; t2 < 64; t2++) {
+        var s0 = rotr(w[t2 - 15], 7) ^ rotr(w[t2 - 15], 18) ^ (w[t2 - 15] >>> 3);
+        var s1 = rotr(w[t2 - 2], 17) ^ rotr(w[t2 - 2], 19) ^ (w[t2 - 2] >>> 10);
+        w[t2] = (w[t2 - 16] + s0 + w[t2 - 7] + s1) | 0;
+      }
+
+      var a = H0, b = H1, c = H2, d = H3, e = H4, f = H5, g = H6, h = H7;
+
+      for (var t3 = 0; t3 < 64; t3++) {
+        var S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+        var ch = (e & f) ^ (~e & g);
+        var temp1 = (h + S1 + ch + K[t3] + w[t3]) | 0;
+        var S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+        var maj = (a & b) ^ (a & c) ^ (b & c);
+        var temp2 = (S0 + maj) | 0;
+
+        h = g; g = f; f = e; e = (d + temp1) | 0;
+        d = c; c = b; b = a; a = (temp1 + temp2) | 0;
+      }
+
+      H0 = (H0 + a) | 0; H1 = (H1 + b) | 0; H2 = (H2 + c) | 0; H3 = (H3 + d) | 0;
+      H4 = (H4 + e) | 0; H5 = (H5 + f) | 0; H6 = (H6 + g) | 0; H7 = (H7 + h) | 0;
+    }
+
+    var out = new Uint8Array(32);
+    [H0, H1, H2, H3, H4, H5, H6, H7].forEach(function (v, i) {
+      out[i * 4] = (v >>> 24) & 255;
+      out[i * 4 + 1] = (v >>> 16) & 255;
+      out[i * 4 + 2] = (v >>> 8) & 255;
+      out[i * 4 + 3] = v & 255;
+    });
+    return out;
+  }
+
+  function rotr(x, n) { return (x >>> n) | (x << (32 - n)); }
+
+  var base = "hello world";
+  var variant = "hello worle";
+  var h1 = new Uint8Array(32);
+  var h2 = new Uint8Array(32);
+  var diffs = [];
+  var diffCount = 0;
+  var sweep = 0;
+
+  function compute() {
+    h1 = sha256(base);
+    h2 = sha256(variant);
+    diffs = [];
+    diffCount = 0;
+    for (var byteIdx = 0; byteIdx < 32; byteIdx++) {
+      for (var b = 0; b < 8; b++) {
+        var bitA = (h1[byteIdx] >> (7 - b)) & 1;
+        var bitB = (h2[byteIdx] >> (7 - b)) & 1;
+        var changed = bitA !== bitB;
+        if (changed) diffCount++;
+        diffs.push(changed);
+      }
+    }
+    diffEl.textContent = diffCount + " / 256";
+    pctEl.textContent = Math.round(diffCount / 256 * 100) + "%";
+    variantEl.textContent = "「" + variant + "」";
+    sweep = 0;
+  }
+
+  function drawGrid(x0, y0, hash, changedMap, title, highlight) {
+    ctx.fillStyle = "rgba(233,239,248,.6)";
+    ctx.font = '700 11px "Hiragino Sans","Yu Gothic",system-ui,sans-serif';
+    ctx.fillText(title, x0, y0 - 10);
+
+    var cell = 15, gap = 3;
+    for (var i = 0; i < 256; i++) {
+      var col = i % 16;
+      var row = (i / 16) | 0;
+      var x = x0 + col * (cell + gap);
+      var y = y0 + row * (cell + gap);
+
+      var byteIdx = i >> 3;
+      var bit = (hash[byteIdx] >> (7 - (i & 7))) & 1;
+
+      if (highlight && changedMap[i] && i <= sweep) {
+        ctx.fillStyle = "#f87171";
+      } else if (bit) {
+        ctx.fillStyle = "#67e8f9";
+      } else {
+        ctx.fillStyle = "rgba(233,239,248,.08)";
+      }
+      ctx.fillRect(x, y, cell, cell);
+
+      if (highlight && changedMap[i]) {
+        ctx.strokeStyle = "rgba(248,113,113,.55)";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x + 0.5, y + 0.5, cell - 1, cell - 1);
+      }
+    }
+  }
+
+  function draw() {
+    ctx.fillStyle = "#03050a";
+    ctx.fillRect(0, 0, W, H);
+
+    drawGrid(42, 34, h2, diffs, "1文字変えた版", true);
+    drawGrid(382, 34, h1, diffs, "もとの版", false);
+
+    // 凡例
+    ctx.font = '700 10px "Hiragino Sans","Yu Gothic",system-ui,sans-serif';
+    ctx.fillStyle = "rgba(103,232,249,.8)";
+    ctx.fillRect(42, H - 40, 10, 10);
+    ctx.fillStyle = "rgba(233,239,248,.55)";
+    ctx.fillText("1 のビット", 58, H - 31);
+
+    ctx.fillStyle = "rgba(233,239,248,.08)";
+    ctx.fillRect(150, H - 40, 10, 10);
+    ctx.fillStyle = "rgba(233,239,248,.55)";
+    ctx.fillText("0 のビット", 166, H - 31);
+
+    ctx.fillStyle = "rgba(248,113,113,.9)";
+    ctx.fillRect(262, H - 40, 10, 10);
+    ctx.fillStyle = "rgba(233,239,248,.55)";
+    ctx.fillText("変わったビット", 278, H - 31);
+
+    // 文字列
+    ctx.font = '700 12px "Hiragino Sans","Yu Gothic",system-ui,sans-serif';
+    ctx.fillStyle = "rgba(233,239,248,.7)";
+    ctx.fillText("もと:  " + base, 42, H - 8);
+    ctx.fillText("変更:  " + variant, 382, H - 8);
+  }
+
+  var frames = 0, fpsTimer = 0, smooth = 0;
+  function loop(now) {
+    if (!fpsTimer) fpsTimer = now;
+    var t0 = performance.now();
+
+    if (sweep < 256) sweep += 4;
+    draw();
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      msEl.textContent = smooth.toFixed(1) + " ms";
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  function update() {
+    base = input.value || " ";
+    var last = base.charAt(base.length - 1);
+    var code = last.charCodeAt(0) + 1;
+    variant = base.slice(0, -1) + String.fromCharCode(code);
+    compute();
+  }
+
+  input.addEventListener("input", update);
+  document.getElementById("shuffle").addEventListener("click", function () {
+    var words = ["hello world", "slime mould", "site factory", "東京の夜", "abc", "1234"];
+    input.value = words[(Math.random() * words.length) | 0];
+    update();
+  });
+
+  update();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
