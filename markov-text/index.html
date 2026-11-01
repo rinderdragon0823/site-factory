@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>マルコフ連鎖 — 次の文字は、前の文字が決める。</title>
+<meta name="description" content="マルコフ連鎖の文章生成を可視化。直前のn文字から次の文字の確率を引いて、文章を組み立てます。">
+<meta property="og:title" content="マルコフ連鎖 — 次の文字は、前の文字が決める。">
+<meta property="og:description" content="前の文字だけを見て、次の文字をくじ引きする。それだけで文章らしきものができます。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/markov-text/">
+<meta property="og:site_name" content="マルコフ連鎖">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --mint:#6ee7b7;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #10281e 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #141a33 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:760px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--mint);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.35rem,5vw,1.85rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+  #view{display:block;width:100%;height:auto}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:112px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--mint);min-width:0;cursor:pointer}
+  .row output{width:64px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .readout{display:flex;gap:16px;flex-wrap:wrap;margin-top:6px;font-size:10.5px;color:var(--muted)}
+  .readout b{color:var(--ink);font-variant-numeric:tabular-nums;font-size:12.5px}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0c1119;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--mint)}
+  .actions button:focus-visible{outline:3px solid var(--mint);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">MARKOV CHAIN / N-GRAM</p>
+      <h1>マルコフ連鎖</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="view" width="720" height="420" role="img" aria-label="マルコフ連鎖の文章生成"></canvas>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="order">次数 n</label><input id="order" type="range" min="1" max="3" step="1" value="2"><output id="orderVal">2</output></div>
+    <div class="row"><label for="len">生成する長さ</label><input id="len" type="range" min="20" max="120" step="5" value="60"><output id="lenVal">60</output></div>
+    <div class="readout">
+      <span>コーパス <b id="corpusLen">0</b></span>
+      <span>状態数 <b id="states">0</b></span>
+      <span>生成済み <b id="gen">0</b></span>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="make">生成し直す</button>
+  </div>
+
+  <p class="note">
+    <b>直前のn文字を状態にして、コーパスの中でその続きに来た文字を数える</b>。数えた分だけ重みをつけて、次の1文字をくじ引きします。
+    次数を上げると元の文に近くなり、下げると崩れます。黄色いのが今の状態、下の棒が次の文字の候補と確率です。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 720, H = 420;
+  var canvas = document.getElementById("view");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var corpusLenEl = document.getElementById("corpusLen");
+  var statesEl = document.getElementById("states");
+  var genEl = document.getElementById("gen");
+  var orderEl = document.getElementById("order");
+  var lenEl = document.getElementById("len");
+  var orderVal = document.getElementById("orderVal");
+  var lenVal = document.getElementById("lenVal");
+
+  var CORPUS = "あるところに、小さな村がありました。村には古い井戸があって、みんながそこで水をくんでいました。" +
+    "ある日、旅の人が村にやってきて、井戸のそばで休みました。旅の人は、村の子どもたちに不思議な話を聞かせました。" +
+    "その話は、遠い国の話でした。遠い国には、大きな森があって、森の奥には光る池があるのだそうです。" +
+    "子どもたちは、その話を聞いて、いつか光る池を見てみたいと思いました。それから、村の子どもたちは毎日、森の話をしました。";
+
+  var order = 2;
+  var genLength = 60;
+  var model = {};
+  var states = [];
+  var text = "";
+  var currentState = "";
+  var candidates = [];
+  var done = false;
+  var tick = 0;
+
+  function buildModel() {
+    model = {};
+    for (var i = 0; i <= CORPUS.length - order; i++) {
+      var s = CORPUS.substr(i, order);
+      var nxt = CORPUS.charAt(i + order);
+      if (!nxt) continue;
+      if (!model[s]) model[s] = {};
+      model[s][nxt] = (model[s][nxt] || 0) + 1;
+    }
+    states = Object.keys(model);
+    corpusLenEl.textContent = String(CORPUS.length);
+    statesEl.textContent = String(states.length);
+  }
+
+  function start() {
+    buildModel();
+    text = "";
+    done = false;
+    tick = 0;
+    currentState = states[(Math.random() * states.length) | 0] || "";
+    text = currentState;
+    candidates = [];
+    genEl.textContent = "0";
+  }
+
+  function pickNext() {
+    var dist = model[currentState];
+    if (!dist) { done = true; return; }
+    var keys = Object.keys(dist);
+    var total = 0;
+    for (var i = 0; i < keys.length; i++) total += dist[keys[i]];
+    var r = Math.random() * total;
+    var acc = 0;
+    for (var j = 0; j < keys.length; j++) {
+      acc += dist[keys[j]];
+      if (r <= acc) return keys[j];
+    }
+    return keys[keys.length - 1];
+  }
+
+  function step() {
+    if (done) return;
+    if (text.length >= genLength) { done = true; return; }
+
+    var dist = model[currentState] || {};
+    var keys = Object.keys(dist);
+    var total = 0;
+    for (var i = 0; i < keys.length; i++) total += dist[keys[i]];
+    candidates = keys.map(function (k) { return { ch: k, p: dist[k] / Math.max(1, total) }; });
+    candidates.sort(function (a, b) { return b.p - a.p; });
+
+    var next = pickNext();
+    text += next;
+    currentState = text.substr(Math.max(0, text.length - order));
+    genEl.textContent = String(text.length - order);
+  }
+
+  function draw() {
+    ctx.fillStyle = "#03050a";
+    ctx.fillRect(0, 0, W, H);
+
+    // 生成テキスト
+    ctx.font = '700 16px "Hiragino Sans","Yu Gothic",system-ui,sans-serif';
+    var maxW = W - 80;
+    var line = "";
+    var y = 54;
+    var lines = [];
+
+    for (var i = 0; i < text.length; i++) {
+      var ch = text.charAt(i);
+      if (ctx.measureText(line + ch).width > maxW) {
+        lines.push(line);
+        line = ch;
+      } else {
+        line += ch;
+      }
+    }
+    lines.push(line);
+
+    for (var L = 0; L < lines.length && L < 9; L++) {
+      var isLast = L === lines.length - 1;
+      var s = lines[L];
+      if (isLast && !done) {
+        var head = s.slice(0, Math.max(0, s.length - order));
+        var tail = s.slice(Math.max(0, s.length - order));
+        ctx.fillStyle = "rgba(233,239,248,.85)";
+        ctx.fillText(head, 40, y);
+        var hw = ctx.measureText(head).width;
+        ctx.fillStyle = "#fde68a";
+        ctx.fillText(tail, 40 + hw, y);
+      } else {
+        ctx.fillStyle = "rgba(233,239,248,.85)";
+        ctx.fillText(s, 40, y);
+      }
+      y += 30;
+    }
+
+    // 状態
+    ctx.font = '700 11px "Hiragino Sans","Yu Gothic",system-ui,sans-serif';
+    ctx.fillStyle = "rgba(233,239,248,.55)";
+    ctx.fillText("いまの状態（直前の" + order + "文字）", 40, H - 130);
+
+    ctx.font = '700 22px ui-monospace,Menlo,Consolas,monospace';
+    ctx.fillStyle = "#fde68a";
+    ctx.fillText(currentState, 40, H - 100);
+
+    // 次の候補
+    ctx.font = '700 11px "Hiragino Sans","Yu Gothic",system-ui,sans-serif';
+    ctx.fillStyle = "rgba(233,239,248,.55)";
+    ctx.fillText("次の文字の候補と確率", 40, H - 70);
+
+    var bx = 40;
+    var by = H - 24;
+    var shown = Math.min(candidates.length, 12);
+    for (var c = 0; c < shown; c++) {
+      var cand = candidates[c];
+      var w = 34;
+      var h = 8 + cand.p * 26;
+
+      ctx.fillStyle = "rgba(110,231,183,.75)";
+      ctx.fillRect(bx, by - h, w - 4, h);
+
+      ctx.fillStyle = "rgba(233,239,248,.85)";
+      ctx.font = '700 13px "Hiragino Sans","Yu Gothic",system-ui,sans-serif';
+      ctx.fillText(cand.ch, bx + 8, by + 16);
+
+      ctx.fillStyle = "rgba(233,239,248,.4)";
+      ctx.font = '700 9px ui-monospace,monospace';
+      ctx.fillText(Math.round(cand.p * 100) + "%", bx + 3, by + 30);
+
+      bx += 46;
+    }
+
+    if (done) {
+      ctx.fillStyle = "#6ee7b7";
+      ctx.font = '700 12px "Hiragino Sans","Yu Gothic",system-ui,sans-serif';
+      ctx.fillText("生成おわり", W - 120, 30);
+    }
+  }
+
+  var frames = 0, fpsTimer = 0, smooth = 0;
+  function loop(now) {
+    if (!fpsTimer) fpsTimer = now;
+    var t0 = performance.now();
+
+    tick++;
+    if (!done && tick % 6 === 0) step();
+    draw();
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      msEl.textContent = smooth.toFixed(1) + " ms";
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  orderEl.addEventListener("input", function () {
+    order = Number(orderEl.value);
+    orderVal.textContent = String(order);
+    start();
+  });
+  lenEl.addEventListener("input", function () {
+    genLength = Number(lenEl.value);
+    lenVal.textContent = String(genLength);
+  });
+  document.getElementById("make").addEventListener("click", start);
+
+  start();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
