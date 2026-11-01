@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>焼きなまし — 熱いうちは、遠回りする。</title>
+<meta name="description" content="焼きなまし法で巡回セールスマン問題を解く可視化。温度が下がるにつれて、経路が縮んでいきます。">
+<meta property="og:title" content="焼きなまし — 熱いうちは、遠回りする。">
+<meta property="og:description" content="悪くなる手も、たまに受け入れる。それを冷ましながら繰り返すと、いい経路に落ち着きます。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/simulated-annealing-tsp/">
+<meta property="og:site_name" content="焼きなまし">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --amber:#fb923c;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #2c1a0e 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #101a33 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:760px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--amber);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.4rem,5.2vw,1.9rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+  #view{display:block;width:100%;height:auto}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:112px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--amber);min-width:0;cursor:pointer}
+  .row output{width:66px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .readout{display:flex;gap:16px;flex-wrap:wrap;margin-top:6px;font-size:10.5px;color:var(--muted)}
+  .readout b{color:var(--ink);font-variant-numeric:tabular-nums;font-size:12.5px}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0c1119;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--amber)}
+  .actions button:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">SIMULATED ANNEALING / TSP</p>
+      <h1>焼きなまし</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="view" width="680" height="440" role="img" aria-label="焼きなましで縮む巡回経路"></canvas>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="t0">初期温度</label><input id="t0" type="range" min="5" max="120" step="1" value="45"><output id="t0Val">45</output></div>
+    <div class="row"><label for="cool">冷え方</label><input id="cool" type="range" min="0.950" max="0.9995" step="0.0005" value="0.9800"><output id="coolVal">0.9800</output></div>
+    <div class="row"><label for="n">都市の数</label><input id="n" type="range" min="10" max="90" step="5" value="45"><output id="nVal">45</output></div>
+    <div class="readout">
+      <span>いま <b id="curLen">0</b></span>
+      <span>最短 <b id="bestLen">0</b></span>
+      <span>温度 <b id="temp">0.0</b></span>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="reheat">再加熱</button>
+    <button type="button" id="reset">都市を引き直す</button>
+  </div>
+
+  <p class="note">
+    <b>経路を2点で切ってつなぎ直し（2-opt）、長くなっても確率 exp(−Δ/T) で受け入れる</b>。T が高いうちは遠回りも許され、冷えると改善だけを取るようになります。
+    灰色が今の経路、橙がこれまでの最短経路です。局所解にはまりにくいのが焼きなましの利点です。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 680, H = 440;
+  var canvas = document.getElementById("view");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var curLenEl = document.getElementById("curLen");
+  var bestLenEl = document.getElementById("bestLen");
+  var tempEl = document.getElementById("temp");
+  var t0El = document.getElementById("t0");
+  var coolEl = document.getElementById("cool");
+  var nEl = document.getElementById("n");
+  var t0Val = document.getElementById("t0Val");
+  var coolVal = document.getElementById("coolVal");
+  var nVal = document.getElementById("nVal");
+
+  var N = 45;
+  var T0 = 45;
+  var cooling = 0.98;
+  var T = T0;
+  var pts = [];
+  var tour = [];
+  var bestTour = [];
+  var bestLen = Infinity;
+  var curLen = 0;
+  var iterations = 0;
+
+  function dist(a, b) {
+    return Math.hypot(pts[a].x - pts[b].x, pts[a].y - pts[b].y);
+  }
+
+  function tourLength(t) {
+    var s = 0;
+    for (var i = 0; i < t.length; i++) s += dist(t[i], t[(i + 1) % t.length]);
+    return s;
+  }
+
+  function reset() {
+    N = Number(nEl.value);
+    T0 = Number(t0El.value);
+    T = T0;
+
+    pts = [];
+    for (var i = 0; i < N; i++) {
+      pts.push({
+        x: 40 + Math.random() * (W - 80),
+        y: 40 + Math.random() * (H - 80)
+      });
+    }
+
+    tour = [];
+    for (var j = 0; j < N; j++) tour.push(j);
+
+    // 初期経路を軽くシャッフル
+    for (var k = 0; k < 120; k++) {
+      var a = (Math.random() * N) | 0;
+      var b = (Math.random() * N) | 0;
+      var tmp = tour[a]; tour[a] = tour[b]; tour[b] = tmp;
+    }
+
+    curLen = tourLength(tour);
+    bestTour = tour.slice();
+    bestLen = curLen;
+    iterations = 0;
+  }
+
+  function step2opt() {
+    var n = tour.length;
+    var i = (Math.random() * n) | 0;
+    var j = (Math.random() * n) | 0;
+    if (i > j) { var t = i; i = j; j = t; }
+    if (j - i < 2) return;
+    if (i === 0 && j === n - 1) return;
+
+    var a = tour[i - 1 < 0 ? n - 1 : i - 1];
+    var b = tour[i];
+    var c = tour[j];
+    var d = tour[(j + 1) % n];
+
+    var before = dist(a, b) + dist(c, d);
+    var after = dist(a, c) + dist(b, d);
+    var delta = after - before;
+
+    if (delta < 0 || Math.random() < Math.exp(-delta / Math.max(1e-6, T))) {
+      // 区間を反転
+      var left = i, right = j;
+      while (left < right) {
+        var tmp = tour[left]; tour[left] = tour[right]; tour[right] = tmp;
+        left++; right--;
+      }
+      curLen += delta;
+      iterations++;
+
+      if (curLen < bestLen) {
+        bestLen = curLen;
+        bestTour = tour.slice();
+      }
+    }
+  }
+
+  function draw() {
+    ctx.fillStyle = "#03050a";
+    ctx.fillRect(0, 0, W, H);
+
+    // 今の経路
+    ctx.strokeStyle = "rgba(233,239,248,.22)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (var i = 0; i < tour.length; i++) {
+      var p = pts[tour[i]];
+      if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+    }
+    ctx.closePath();
+    ctx.stroke();
+
+    // 最短経路
+    ctx.strokeStyle = "rgba(251,146,60,.9)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (var j = 0; j < bestTour.length; j++) {
+      var q = pts[bestTour[j]];
+      if (j === 0) ctx.moveTo(q.x, q.y); else ctx.lineTo(q.x, q.y);
+    }
+    ctx.closePath();
+    ctx.stroke();
+
+    // 都市
+    for (var k = 0; k < pts.length; k++) {
+      ctx.fillStyle = "#fde68a";
+      ctx.beginPath();
+      ctx.arc(pts[k].x, pts[k].y, 2.6, 0, 6.283);
+      ctx.fill();
+    }
+  }
+
+  var frames = 0, fpsTimer = 0, smooth = 0;
+  function loop(now) {
+    if (!fpsTimer) fpsTimer = now;
+    var t0 = performance.now();
+
+    for (var s = 0; s < 600; s++) {
+      step2opt();
+    }
+    T *= cooling;
+    if (T < 0.02) T = 0.02;
+
+    draw();
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+
+    curLenEl.textContent = curLen.toFixed(0);
+    bestLenEl.textContent = bestLen.toFixed(0);
+    tempEl.textContent = T.toFixed(1);
+    msEl.textContent = smooth.toFixed(1) + " ms / " + iterations.toLocaleString("en-US") + " 手";
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  t0El.addEventListener("input", function () { T0 = Number(t0El.value); t0Val.textContent = String(T0); });
+  coolEl.addEventListener("input", function () { cooling = Number(coolEl.value); coolVal.textContent = cooling.toFixed(5); });
+  nEl.addEventListener("input", function () { nVal.textContent = String(nEl.value); reset(); });
+
+  document.getElementById("reheat").addEventListener("click", function () { T = T0; });
+  document.getElementById("reset").addEventListener("click", reset);
+
+  reset();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
