@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>炎 — 1行の熱が、上へ登る。</title>
+<meta name="description" content="ドゥーム風のプロシージャル炎。下の行の熱を、少しずつ減らしながら上へ運ぶだけで燃えます。">
+<meta property="og:title" content="炎 — 1行の熱が、上へ登る。">
+<meta property="og:description" content="熱を1つ上へ移して、ランダムに冷やす。それだけで炎になります。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/fire-field/">
+<meta property="og:site_name" content="炎">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --amber:#fb923c;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #2c1608 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #141a33 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:720px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--amber);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.5rem,5.6vw,2rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{position:relative;margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55);touch-action:none}
+  #view{display:block;width:100%;height:auto;cursor:crosshair}
+  .hint{position:absolute;left:10px;bottom:8px;font-size:10px;color:rgba(233,239,248,.45);pointer-events:none}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:112px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--amber);min-width:0;cursor:pointer}
+  .row output{width:64px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0c1119;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--amber)}
+  .actions button:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">PROCEDURAL FIRE</p>
+      <h1>炎</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms / 200×150</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="view" width="640" height="480" role="img" aria-label="ゆらめく炎"></canvas>
+    <div class="hint">ドラッグで熱を足せます</div>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="decay">冷えやすさ</label><input id="decay" type="range" min="0.05" max="1.0" step="0.05" value="0.25"><output id="decayVal">0.25</output></div>
+    <div class="row"><label for="random">ゆらぎ</label><input id="random" type="range" min="0" max="1" step="0.05" value="0.6"><output id="randomVal">0.60</output></div>
+    <div class="row"><label for="wind">風</label><input id="wind" type="range" min="-2" max="2" step="0.1" value="0"><output id="windVal">0.0</output></div>
+    <div class="row"><label for="power">炎の強さ</label><input id="power" type="range" min="0.2" max="1.4" step="0.05" value="0.9"><output id="powerVal">0.90</output></div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="pause">停止</button>
+    <button type="button" id="reset">リセット</button>
+  </div>
+
+  <p class="note">
+    <b>下の行に熱を置き、1つ上の画素へ「少し冷やして・横にずらして」運ぶ</b>（ドゥームの炎アルゴリズム）。熱の量で色を選ぶだけで、炎に見えます。
+    横のずらしと冷え方のランダムさが、ゆらめきを作っています。風を左右に動かすと、流れが変わります。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 640, H = 480;
+  var GW = 200, GH = 150;
+  var canvas = document.getElementById("view");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var off = document.createElement("canvas");
+  off.width = GW;
+  off.height = GH;
+  var octx = off.getContext("2d");
+  var img = octx.createImageData(GW, GH);
+
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var decayEl = document.getElementById("decay");
+  var randomEl = document.getElementById("random");
+  var windEl = document.getElementById("wind");
+  var powerEl = document.getElementById("power");
+  var decayVal = document.getElementById("decayVal");
+  var randomVal = document.getElementById("randomVal");
+  var windVal = document.getElementById("windVal");
+  var powerVal = document.getElementById("powerVal");
+
+  var heat = new Uint8Array(GW * GH);
+  var MAXH = 36;
+  var decay = 0.25;
+  var randomness = 0.6;
+  var wind = 0;
+  var power = 0.9;
+  var running = true;
+  var dragging = false;
+
+  var PALETTE = [];
+  (function buildPalette() {
+    for (var i = 0; i <= MAXH; i++) {
+      var t = i / MAXH;
+      var r, g, b;
+      if (t < 0.25) {
+        var k = t / 0.25;
+        r = 70 + 160 * k; g = 8 + 40 * k; b = 6 + 12 * k;
+      } else if (t < 0.55) {
+        var k2 = (t - 0.25) / 0.3;
+        r = 220 + 35 * k2; g = 34 + 110 * k2; b = 14 + 10 * k2;
+      } else if (t < 0.8) {
+        var k3 = (t - 0.55) / 0.25;
+        r = 255; g = 144 + 90 * k3; b = 24 + 20 * k3;
+      } else {
+        var k4 = (t - 0.8) / 0.2;
+        r = 255; g = 234 + 21 * k4; b = 44 + 190 * k4;
+      }
+      PALETTE.push([r | 0, g | 0, b | 0]);
+    }
+  })();
+
+  function step() {
+    var bottom = (GH - 1) * GW;
+
+    for (var x = 0; x < GW; x++) {
+      heat[bottom + x] = Math.max(0, MAXH * power + (Math.random() * 8 - 4));
+    }
+
+    for (var y = 0; y < GH - 1; y++) {
+      for (var x2 = 0; x2 < GW; x2++) {
+        var src = (y + 1) * GW + x2;
+
+        var shift = 0;
+        if (Math.random() < randomness) shift = Math.random() < 0.5 ? -1 : 1;
+        shift += Math.round(wind);
+
+        var dx = x2 + shift;
+        if (dx < 0) dx = 0; else if (dx >= GW) dx = GW - 1;
+
+        var dec = Math.random() * decay;
+        var v = heat[src] - dec;
+        if (v < 0) v = 0;
+
+        heat[y * GW + dx] = v;
+      }
+    }
+  }
+
+  function render() {
+    var d = img.data;
+    var p = 0;
+    for (var i = 0; i < GW * GH; i++) {
+      var v = heat[i];
+      if (v > MAXH) v = MAXH;
+      var c = PALETTE[v | 0];
+      d[p] = c[0]; d[p + 1] = c[1]; d[p + 2] = c[2]; d[p + 3] = 255;
+      p += 4;
+    }
+    octx.putImageData(img, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(off, 0, 0, W, H);
+  }
+
+  var frames = 0, fpsTimer = 0, smooth = 0;
+  function loop(now) {
+    if (!fpsTimer) fpsTimer = now;
+    var t0 = performance.now();
+    if (running) step();
+    render();
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      msEl.textContent = smooth.toFixed(1) + " ms / " + GW + "×" + GH;
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  function addHeatAt(clientX, clientY) {
+    var rect = canvas.getBoundingClientRect();
+    var x = Math.floor((clientX - rect.left) / rect.width * GW);
+    var y = Math.floor((clientY - rect.top) / rect.height * GH);
+    for (var dy = -4; dy <= 4; dy++) {
+      for (var dx = -4; dx <= 4; dx++) {
+        var xx = x + dx, yy = y + dy;
+        if (xx < 0 || yy < 0 || xx >= GW || yy >= GH) continue;
+        var d2 = dx * dx + dy * dy;
+        if (d2 > 16) continue;
+        heat[yy * GW + xx] = Math.min(MAXH, heat[yy * GW + xx] + (MAXH * 0.55) * (1 - d2 / 16));
+      }
+    }
+  }
+
+  canvas.addEventListener("pointerdown", function (e) {
+    e.preventDefault();
+    dragging = true;
+    addHeatAt(e.clientX, e.clientY);
+  });
+  canvas.addEventListener("pointermove", function (e) {
+    if (dragging) addHeatAt(e.clientX, e.clientY);
+  });
+  function end() { dragging = false; }
+  canvas.addEventListener("pointerup", end);
+  canvas.addEventListener("pointercancel", end);
+  canvas.addEventListener("pointerleave", end);
+
+  decayEl.addEventListener("input", function () { decay = Number(decayEl.value); decayVal.textContent = decay.toFixed(2); });
+  randomEl.addEventListener("input", function () { randomness = Number(randomEl.value); randomVal.textContent = randomness.toFixed(2); });
+  windEl.addEventListener("input", function () { wind = Number(windEl.value); windVal.textContent = wind.toFixed(1); });
+  powerEl.addEventListener("input", function () { power = Number(powerEl.value); powerVal.textContent = power.toFixed(2); });
+
+  document.getElementById("pause").addEventListener("click", function () {
+    running = !running;
+    this.textContent = running ? "停止" : "再開";
+  });
+  document.getElementById("reset").addEventListener("click", function () {
+    heat.fill(0);
+  });
+
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
