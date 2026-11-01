@@ -2070,6 +2070,27 @@
           }
         ]
       }
+    },
+    {
+      "slug": "distance-field-jfa",
+      "title": "距離場",
+      "pitch": "Jump Flooding Algorithm で距離場とボロノイ領域を計算する技術デモ。パスを増やすと一気に正確になります。",
+      "kind": "demo",
+      "date": "2026-11-01",
+      "demo": {
+        "steps": [
+          {
+            "wait": 3200
+          },
+          {
+            "click": "種を散らす",
+            "after": 3000
+          },
+          {
+            "wait": 400
+          }
+        ]
+      }
     }
   ]
 }
