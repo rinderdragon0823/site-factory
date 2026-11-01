@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>パーコレーション — 開いた穴が、つながる瞬間。</title>
+<meta name="description" content="サイトパーコレーションの可視化。確率pで開いたマスがクラスタを作り、ある確率で突然つながります。">
+<meta property="og:title" content="パーコレーション — 開いた穴が、つながる瞬間。">
+<meta property="og:description" content="確率pでマスを開けて、つながった集まりを数える。pを上げると、ある点で突然つながります。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/percolation/">
+<meta property="og:site_name" content="パーコレーション">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --amber:#fbbf24;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #2a2110 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #141a33 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:760px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--amber);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.35rem,5vw,1.85rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+  #view{display:block;width:100%;height:auto}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:104px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--amber);min-width:0;cursor:pointer}
+  .row output{width:64px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .readout{display:flex;gap:16px;flex-wrap:wrap;margin-top:6px;font-size:10.5px;color:var(--muted)}
+  .readout b{color:var(--ink);font-variant-numeric:tabular-nums;font-size:12.5px}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0c1119;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--amber)}
+  .actions button[aria-pressed="true"]{background:var(--amber);color:#231a04;border-color:var(--amber)}
+  .actions button:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">SITE PERCOLATION</p>
+      <h1>パーコレーション</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="view" width="720" height="480" role="img" aria-label="パーコレーションのクラスタ"></canvas>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="p">開く確率 p</label><input id="p" type="range" min="0.30" max="0.75" step="0.005" value="0.55"><output id="pVal">0.550</output></div>
+    <div class="readout">
+      <span>開放率 <b id="openRate">0</b></span>
+      <span>最大クラスタ <b id="maxCluster">0</b></span>
+      <span>貫通 <b id="span">—</b></span>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="reroll">引き直す</button>
+    <button type="button" id="sweep" aria-pressed="false">p を自動で上げる</button>
+  </div>
+
+  <p class="note">
+    <b>各マスを確率 p で開け、上下左右につながった集まり（クラスタ）を union-find でまとめる</b>だけ。p が小さいと島、大きくなると海になります。
+    理論上のしきい値は約 0.593。それを超えると、左端から右端まで貫通するクラスタが現れます（金色）。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 720, H = 480;
+  var GW = 144, GH = 96;
+  var canvas = document.getElementById("view");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var off = document.createElement("canvas");
+  off.width = GW;
+  off.height = GH;
+  var octx = off.getContext("2d");
+  var img = octx.createImageData(GW, GH);
+
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var openRateEl = document.getElementById("openRate");
+  var maxClusterEl = document.getElementById("maxCluster");
+  var spanEl = document.getElementById("span");
+  var pEl = document.getElementById("p");
+  var pVal = document.getElementById("pVal");
+
+  var open = new Uint8Array(GW * GH);
+  var parent = new Int32Array(GW * GH);
+  var size = new Int32Array(GW * GH);
+  var clusterOf = new Int32Array(GW * GH);
+  var rootCount = 0;
+  var biggest = 0;
+  var spansLR = false;
+  var p = 0.55;
+  var sweeping = false;
+
+  function find(a) {
+    while (parent[a] !== a) {
+      parent[a] = parent[parent[a]];
+      a = parent[a];
+    }
+    return a;
+  }
+
+  function union(a, b) {
+    var ra = find(a), rb = find(b);
+    if (ra === rb) return;
+    if (size[ra] < size[rb]) { var t = ra; ra = rb; rb = t; }
+    parent[rb] = ra;
+    size[ra] += size[rb];
+  }
+
+  function generate() {
+    var n = GW * GH;
+    for (var i = 0; i < n; i++) {
+      open[i] = Math.random() < p ? 1 : 0;
+      parent[i] = i;
+      size[i] = 1;
+    }
+
+    for (var y = 0; y < GH; y++) {
+      for (var x = 0; x < GW; x++) {
+        var i2 = y * GW + x;
+        if (!open[i2]) continue;
+        if (x + 1 < GW && open[i2 + 1]) union(i2, i2 + 1);
+        if (y + 1 < GH && open[i2 + GW]) union(i2, i2 + GW);
+      }
+    }
+
+    biggest = 0;
+    var counted = 0;
+    var leftRoots = {};
+    var rightRoots = {};
+
+    for (var k = 0; k < n; k++) {
+      if (open[k]) {
+        counted++;
+        var r = find(k);
+        clusterOf[k] = r;
+        if (size[r] > biggest) biggest = size[r];
+        if (k % GW === 0) leftRoots[r] = true;
+        if (k % GW === GW - 1) rightRoots[r] = true;
+      } else {
+        clusterOf[k] = -1;
+      }
+    }
+
+    spansLR = false;
+    for (var key in leftRoots) {
+      if (rightRoots[key]) { spansLR = true; break; }
+    }
+
+    openRateEl.textContent = (counted / n * 100).toFixed(1) + "%";
+    maxClusterEl.textContent = biggest + " マス";
+    spanEl.textContent = spansLR ? "あり" : "なし";
+    spanEl.style.color = spansLR ? "#fcd34d" : "";
+  }
+
+  function hueFor(root) {
+    var h = (root * 2654435761) % 360;
+    return h < 0 ? h + 360 : h;
+  }
+
+  function render() {
+    var d = img.data;
+    var pix = 0;
+    for (var i = 0; i < GW * GH; i++) {
+      if (!open[i]) {
+        d[pix] = 8; d[pix + 1] = 10; d[pix + 2] = 16; d[pix + 3] = 255;
+      } else {
+        var r = clusterOf[i];
+        var isSpan = spansLR && clusterOf[i] === spannerRoot;
+        if (isSpan) {
+          d[pix] = 253; d[pix + 1] = 224; d[pix + 2] = 71;
+        } else {
+          var h = hueFor(r);
+          var c = hsl(h, 62, size[r] === biggest ? 62 : 45);
+          d[pix] = c[0]; d[pix + 1] = c[1]; d[pix + 2] = c[2];
+        }
+        d[pix + 3] = 255;
+      }
+      pix += 4;
+    }
+    octx.putImageData(img, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(off, 0, 0, W, H);
+  }
+
+  var spannerRoot = -2;
+
+  function findSpanRoot() {
+    var left = {}, right = {};
+    for (var y = 0; y < GH; y++) {
+      var a = y * GW;
+      var b = y * GW + GW - 1;
+      if (open[a]) left[find(a)] = true;
+      if (open[b]) right[find(b)] = true;
+    }
+    for (var k in left) if (right[k]) return Number(k);
+    return -2;
+  }
+
+  function hsl(h, s, l) {
+    h = ((h % 360) + 360) % 360;
+    var c = (1 - Math.abs(2 * l / 100 - 1)) * s / 100;
+    var hp = h / 60;
+    var x = c * (1 - Math.abs(hp % 2 - 1));
+    var r = 0, g = 0, b = 0;
+    if (hp < 1) { r = c; g = x; }
+    else if (hp < 2) { r = x; g = c; }
+    else if (hp < 3) { g = c; b = x; }
+    else if (hp < 4) { g = x; b = c; }
+    else if (hp < 5) { r = x; b = c; }
+    else { r = c; b = x; }
+    var m = l / 100 - c / 2;
+    return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
+  }
+
+  var frames = 0, fpsTimer = 0, smooth = 0;
+  function loop(now) {
+    if (!fpsTimer) fpsTimer = now;
+    var t0 = performance.now();
+    if (sweeping) {
+      p += 0.0015;
+      if (p > 0.75) { p = 0.30; }
+      pEl.value = String(p);
+      pVal.textContent = p.toFixed(3);
+      generate();
+      spannerRoot = findSpanRoot();
+    }
+    render();
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+
+    msEl.textContent = smooth.toFixed(1) + " ms / " + GW + "×" + GH;
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  pEl.addEventListener("input", function () {
+    p = Number(pEl.value);
+    pVal.textContent = p.toFixed(3);
+    generate();
+    spannerRoot = findSpanRoot();
+  });
+  document.getElementById("reroll").addEventListener("click", function () {
+    generate();
+    spannerRoot = findSpanRoot();
+  });
+  document.getElementById("sweep").addEventListener("click", function () {
+    sweeping = !sweeping;
+    this.setAttribute("aria-pressed", sweeping ? "true" : "false");
+  });
+
+  generate();
+  spannerRoot = findSpanRoot();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
