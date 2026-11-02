@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ドミノ — 1枚が、全部を倒す。</title>
+<meta name="description" content="ドミノ倒しの物理デモ。角度と角速度、重力トルクと隣への衝撃伝達で、連鎖が起きます。">
+<meta property="og:title" content="ドミノ — 1枚が、全部を倒す。">
+<meta property="og:description" content="ひと押しで、隣へ、その隣へ。角度の力学だけで連鎖します。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/domino-chain/">
+<meta property="og:site_name" content="ドミノ">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --amber:#fbbf24;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #2a2110 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #141a33 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:760px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--amber);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.4rem,5.2vw,1.9rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{position:relative;margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55);touch-action:none}
+  #view{display:block;width:100%;height:auto;cursor:pointer}
+  .hint{position:absolute;left:10px;bottom:8px;font-size:10px;color:rgba(233,239,248,.45);pointer-events:none}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:104px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--amber);min-width:0;cursor:pointer}
+  .row output{width:64px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .readout{display:flex;gap:16px;flex-wrap:wrap;margin-top:6px;font-size:10.5px;color:var(--muted)}
+  .readout b{color:var(--ink);font-variant-numeric:tabular-nums;font-size:12.5px}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0c1119;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--amber)}
+  .actions button:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">DOMINO CHAIN</p>
+      <h1>ドミノ</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="view" width="720" height="480" role="img" aria-label="ドミノ倒し"></canvas>
+    <div class="hint">クリックで1枚目を押します</div>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="gravity">重力</label><input id="gravity" type="range" min="2" max="16" step="0.5" value="8"><output id="gravityVal">8.0</output></div>
+    <div class="row"><label for="gap">間隔</label><input id="gap" type="range" min="18" max="40" step="1" value="26"><output id="gapVal">26</output></div>
+    <div class="row"><label for="damp">減衰</label><input id="damp" type="range" min="0.9" max="0.999" step="0.001" value="0.985"><output id="dampVal">0.985</output></div>
+    <div class="readout">
+      <span>倒れた枚数 <b id="down">0</b></span>
+      <span>全長 <b id="total">0</b></span>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="push">押す</button>
+    <button type="button" id="reset">並べ直す</button>
+  </div>
+
+  <p class="note">
+    <b>倒れた角度に応じて重力トルクが働き、隣のドミノに角速度を渡す</b>。これだけで連鎖します。
+    間隔が広すぎると届かず、狭すぎても詰まって止まります。間隔を動かして、伝わる条件を探してみてください。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 720, H = 480;
+  var canvas = document.getElementById("view");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var downEl = document.getElementById("down");
+  var totalEl = document.getElementById("total");
+  var gravityEl = document.getElementById("gravity");
+  var gapEl = document.getElementById("gap");
+  var dampEl = document.getElementById("damp");
+  var gravityVal = document.getElementById("gravityVal");
+  var gapVal = document.getElementById("gapVal");
+  var dampVal = document.getElementById("dampVal");
+
+  var N = 24;
+  var gravity = 8;
+  var gap = 26;
+  var damp = 0.985;
+  var dominoes = [];
+  var groundY = H - 90;
+  var dominoW = 12;
+  var dominoH = 84;
+
+  function reset() {
+    dominoes = [];
+    var startX = 50;
+    for (var i = 0; i < N; i++) {
+      dominoes.push({
+        x: startX + i * gap,
+        theta: 0,
+        omega: 0
+      });
+    }
+    totalEl.textContent = String(N);
+  }
+
+  function pushFirst() {
+    if (dominoes.length) {
+      dominoes[0].theta = 0.03;
+      dominoes[0].omega = 3.2;
+    }
+  }
+
+  function step(dt) {
+    for (var i = 0; i < dominoes.length; i++) {
+      var d = dominoes[i];
+
+      if (d.theta > 0 && d.theta < Math.PI / 2) {
+        d.omega += gravity * Math.sin(d.theta) * dt * 2.4;
+        d.omega *= Math.pow(damp, dt * 60);
+        d.theta += d.omega * dt;
+
+        if (d.theta >= Math.PI / 2) {
+          d.theta = Math.PI / 2;
+          d.omega = 0;
+        }
+      }
+
+      // 次のドミノへ衝撃
+      if (i + 1 < dominoes.length && d.theta > 0.55) {
+        var n = dominoes[i + 1];
+        if (n.theta < 0.02) {
+          var reach = dominoH * Math.sin(d.theta);
+          if (reach > gap - dominoW - 2) {
+            n.omega = Math.max(n.omega, d.omega * 0.75 + 0.6);
+            n.theta = Math.max(n.theta, 0.02);
+          }
+        } else if (n.theta < Math.PI / 2 && n.omega < d.omega * 0.4) {
+          n.omega = Math.max(n.omega, d.omega * 0.35);
+        }
+      }
+    }
+  }
+
+  function draw() {
+    ctx.fillStyle = "#03050a";
+    ctx.fillRect(0, 0, W, H);
+
+    // 床
+    ctx.fillStyle = "rgba(233,239,248,.10)";
+    ctx.fillRect(0, groundY, W, 2);
+
+    var downCount = 0;
+
+    for (var i = 0; i < dominoes.length; i++) {
+      var d = dominoes[i];
+      if (d.theta > 0.1) downCount++;
+
+      var t = 1 - i / dominoes.length;
+      ctx.save();
+      ctx.translate(d.x, groundY);
+      ctx.rotate(d.theta);
+
+      var grad = ctx.createLinearGradient(-dominoW / 2, -dominoH, dominoW / 2, 0);
+      grad.addColorStop(0, "hsla(" + (40 + t * 40) + ",85%,68%,1)");
+      grad.addColorStop(1, "hsla(" + (20 + t * 20) + ",80%,42%,1)");
+      ctx.fillStyle = grad;
+
+      ctx.fillRect(-dominoW / 2, -dominoH, dominoW, dominoH - 3);
+      ctx.restore();
+
+      // 影
+      ctx.fillStyle = "rgba(0,0,0,.35)";
+      ctx.fillRect(d.x - dominoW / 2, groundY + 2, dominoW, 3);
+    }
+
+    downEl.textContent = String(downCount);
+  }
+
+  var last = 0, frames = 0, fpsTimer = 0, smooth = 0;
+  function loop(now) {
+    if (!fpsTimer) { fpsTimer = now; last = now; }
+    var dt = Math.min(0.033, (now - last) / 1000);
+    last = now;
+
+    var t0 = performance.now();
+    step(dt);
+    draw();
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+
+    msEl.textContent = smooth.toFixed(1) + " ms";
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  gravityEl.addEventListener("input", function () { gravity = Number(gravityEl.value); gravityVal.textContent = gravity.toFixed(1); });
+  gapEl.addEventListener("input", function () {
+    gap = Number(gapEl.value);
+    gapVal.textContent = String(gap);
+    reset();
+  });
+  dampEl.addEventListener("input", function () { damp = Number(dampEl.value); dampVal.textContent = damp.toFixed(3); });
+
+  document.getElementById("push").addEventListener("click", pushFirst);
+  document.getElementById("reset").addEventListener("click", reset);
+  canvas.addEventListener("pointerdown", pushFirst);
+
+  reset();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
