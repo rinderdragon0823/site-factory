@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ルール110 — 1次元の規則が、模様になる。</title>
+<meta name="description" content="1次元セルオートマトンの可視化。ルール番号を変えると、まったく違う模様が生まれます。">
+<meta property="og:title" content="ルール110 — 1次元の規則が、模様になる。">
+<meta property="og:description" content="3つのマスの組み合わせで次のマスが決まる。それだけを何段も重ねると、模様になります。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/rule110/">
+<meta property="og:site_name" content="ルール110">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --mint:#6ee7b7;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #10281e 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #141a33 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:760px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--mint);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.35rem,5vw,1.85rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+  #view{display:block;width:100%;height:auto;image-rendering:pixelated}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:104px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--mint);min-width:0;cursor:pointer}
+  .row output{width:64px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .readout{display:flex;gap:16px;flex-wrap:wrap;margin-top:6px;font-size:10.5px;color:var(--muted)}
+  .readout b{color:var(--ink);font-variant-numeric:tabular-nums;font-size:12.5px}
+  .rule{font-family:ui-monospace,Menlo,Consolas,monospace;letter-spacing:.12em}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0c1119;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--mint)}
+  .actions button:focus-visible{outline:3px solid var(--mint);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">ELEMENTARY CA</p>
+      <h1>ルール110</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="view" width="640" height="480" role="img" aria-label="1次元セルオートマトンの時空間図"></canvas>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="rule">ルール番号</label><input id="rule" type="range" min="0" max="255" step="1" value="110"><output id="ruleVal">110</output></div>
+    <div class="row"><label for="density">初期の密度</label><input id="density" type="range" min="0.05" max="0.6" step="0.01" value="0.5"><output id="densityVal">0.50</output></div>
+    <div class="row"><label for="speed">進む速さ</label><input id="speed" type="range" min="1" max="8" step="1" value="3"><output id="speedVal">3</output></div>
+    <div class="readout">
+      <span>ルール <b id="bits" class="rule">01101110</b></span>
+      <span>ステップ <b id="steps">0</b></span>
+      <span>生きたセル <b id="alive">0</b></span>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="pause">停止</button>
+    <button type="button" id="reset">やり直す</button>
+  </div>
+
+  <p class="note">
+    <b>左・自分・右の3マスの白黒（8通り）ごとに、次のマスを白か黒かに決める</b>。その8つの答えを2進数で並べたのがルール番号です。
+    ルール110はチューリング完全として知られ、複雑な構造が湧き続けます。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var CW = 320, CH = 240;
+  var canvas = document.getElementById("view");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var off = document.createElement("canvas");
+  off.width = CW;
+  off.height = CH;
+  var octx = off.getContext("2d");
+  var img = octx.createImageData(CW, CH);
+
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var bitsEl = document.getElementById("bits");
+  var stepsEl = document.getElementById("steps");
+  var aliveEl = document.getElementById("alive");
+  var ruleEl = document.getElementById("rule");
+  var densityEl = document.getElementById("density");
+  var speedEl = document.getElementById("speed");
+  var ruleVal = document.getElementById("ruleVal");
+  var densityVal = document.getElementById("densityVal");
+  var speedVal = document.getElementById("speedVal");
+
+  var rule = 110;
+  var density = 0.5;
+  var speed = 3;
+  var row = new Uint8Array(CW);
+  var steps = 0;
+  var running = true;
+
+  function seed() {
+    row = new Uint8Array(CW);
+    for (var i = 0; i < CW; i++) {
+      row[i] = Math.random() < density ? 1 : 0;
+    }
+    // 端の1マスだけは必ず置く（ルール110が育つ）
+    row[CW >> 1] = 1;
+
+    var d = img.data;
+    for (var q = 0; q < d.length; q += 4) {
+      d[q] = 4; d[q + 1] = 6; d[q + 2] = 10; d[q + 3] = 255;
+    }
+    octx.putImageData(img, 0, 0);
+    steps = 0;
+  }
+
+  function drawRow(y) {
+    var d = img.data;
+    var base = y * CW * 4;
+    for (var x = 0; x < CW; x++) {
+      var p = base + x * 4;
+      if (row[x]) {
+        d[p] = 150; d[p + 1] = 245; d[p + 2] = 200;
+      } else {
+        d[p] = 4; d[p + 1] = 6; d[p + 2] = 10;
+      }
+      d[p + 3] = 255;
+    }
+  }
+
+  function step() {
+    var next = new Uint8Array(CW);
+    for (var x = 0; x < CW; x++) {
+      var l = row[(x - 1 + CW) % CW];
+      var c = row[x];
+      var r = row[(x + 1) % CW];
+      var idx = (l << 2) | (c << 1) | r;
+      next[x] = (rule >> idx) & 1;
+    }
+    row = next;
+    steps++;
+  }
+
+  function shiftDown() {
+    var d = img.data;
+    var rowBytes = CW * 4;
+    d.copyWithin(rowBytes, 0, (CH - 1) * rowBytes);
+  }
+
+  function render() {
+    drawRow(0);
+    octx.putImageData(img, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(off, 0, 0, 640, 480);
+
+    var alive = 0;
+    for (var i = 0; i < CW; i++) alive += row[i];
+    aliveEl.textContent = String(alive);
+    stepsEl.textContent = String(steps);
+  }
+
+  var frames = 0, fpsTimer = 0, smooth = 0;
+  function loop(now) {
+    if (!fpsTimer) fpsTimer = now;
+    var t0 = performance.now();
+
+    if (running) {
+      for (var s = 0; s < speed; s++) {
+        step();
+        shiftDown();
+        drawRow(0);
+      }
+    }
+    render();
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+
+    msEl.textContent = smooth.toFixed(1) + " ms / " + CW + " セル";
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  function updateBits() {
+    bitsEl.textContent = rule.toString(2).padStart(8, "0");
+  }
+
+  ruleEl.addEventListener("input", function () {
+    rule = Number(ruleEl.value);
+    ruleVal.textContent = String(rule);
+    updateBits();
+    seed();
+  });
+  densityEl.addEventListener("input", function () {
+    density = Number(densityEl.value);
+    densityVal.textContent = density.toFixed(2);
+    seed();
+  });
+  speedEl.addEventListener("input", function () {
+    speed = Number(speedEl.value);
+    speedVal.textContent = String(speed);
+  });
+
+  document.getElementById("pause").addEventListener("click", function () {
+    running = !running;
+    this.textContent = running ? "停止" : "再開";
+  });
+  document.getElementById("reset").addEventListener("click", seed);
+
+  updateBits();
+  seed();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
