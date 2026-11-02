@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>弾性衝突 — ぶつかって、はね返る。</title>
+<meta name="description" content="2Dボール物理のデモ。重力と弾性衝突、壁での反射を、運動量と反発係数で計算しています。">
+<meta property="og:title" content="弾性衝突 — ぶつかって、はね返る。">
+<meta property="og:description" content="ぶつかった瞬間に、運動量を分配して押し返す。それだけでボールらしく動きます。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/ball-physics/">
+<meta property="og:site_name" content="弾性衝突">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --cyan:#67e8f9;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #0f2633 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #1a1430 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:720px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--cyan);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.4rem,5.2vw,1.9rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{position:relative;margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55);touch-action:none}
+  #view{display:block;width:100%;height:auto;cursor:crosshair}
+  .hint{position:absolute;left:10px;bottom:8px;font-size:10px;color:rgba(233,239,248,.45);pointer-events:none}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:112px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--cyan);min-width:0;cursor:pointer}
+  .row output{width:64px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .readout{display:flex;gap:16px;flex-wrap:wrap;margin-top:6px;font-size:10.5px;color:var(--muted)}
+  .readout b{color:var(--ink);font-variant-numeric:tabular-nums;font-size:12.5px}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0c1119;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--cyan)}
+  .actions button:focus-visible{outline:3px solid var(--cyan);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">2D BALL PHYSICS</p>
+      <h1>弾性衝突</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="view" width="640" height="480" role="img" aria-label="跳ね回るボール"></canvas>
+    <div class="hint">ドラッグでボールを投げられます</div>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="gravity">重力</label><input id="gravity" type="range" min="0" max="1200" step="20" value="620"><output id="gravityVal">620</output></div>
+    <div class="row"><label for="rest">反発係数</label><input id="rest" type="range" min="0.3" max="1" step="0.02" value="0.82"><output id="restVal">0.82</output></div>
+    <div class="row"><label for="count">ボールの数</label><input id="count" type="range" min="10" max="120" step="5" value="60"><output id="countVal">60</output></div>
+    <div class="readout">
+      <span>衝突 <b id="hits">0</b></span>
+      <span>運動エネルギー <b id="energy">0</b></span>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="reset">リセット</button>
+  </div>
+
+  <p class="note">
+    <b>ボール同士が重なったら、法線方向の相対速度を反発係数で跳ね返し、運動量を質量比で分ける</b>。壁は反射。
+    衝撃を吸収するたびにエネルギーが減って、だんだん静かになります。重力を上げると、より激しくぶつかります。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 640, H = 480;
+  var canvas = document.getElementById("view");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var hitsEl = document.getElementById("hits");
+  var energyEl = document.getElementById("energy");
+  var gravityEl = document.getElementById("gravity");
+  var restEl = document.getElementById("rest");
+  var countEl = document.getElementById("count");
+  var gravityVal = document.getElementById("gravityVal");
+  var restVal = document.getElementById("restVal");
+  var countVal = document.getElementById("countVal");
+
+  var balls = [];
+  var gravity = 620;
+  var restitution = 0.82;
+  var targetCount = 60;
+  var hits = 0;
+  var hitsWindow = 0;
+  var hitsTimer = 0;
+
+  function rand(min, max) { return min + Math.random() * (max - min); }
+
+  function makeBall(x, y) {
+    var r = rand(7, 15);
+    return {
+      x: x !== undefined ? x : rand(r, W - r),
+      y: y !== undefined ? y : rand(r, H * 0.6),
+      vx: rand(-160, 160),
+      vy: rand(-80, 40),
+      r: r,
+      m: r * r,
+      hue: rand(160, 220)
+    };
+  }
+
+  function reset() {
+    balls = [];
+    for (var i = 0; i < targetCount; i++) balls.push(makeBall());
+    hits = 0;
+  }
+
+  function step(dt) {
+    var i, j, b;
+
+    for (i = 0; i < balls.length; i++) {
+      b = balls[i];
+      b.vy += gravity * dt;
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
+
+      if (b.x - b.r < 0) { b.x = b.r; b.vx = Math.abs(b.vx) * restitution; }
+      if (b.x + b.r > W) { b.x = W - b.r; b.vx = -Math.abs(b.vx) * restitution; }
+      if (b.y - b.r < 0) { b.y = b.r; b.vy = Math.abs(b.vy) * restitution; }
+      if (b.y + b.r > H) {
+        b.y = H - b.r;
+        b.vy = -Math.abs(b.vy) * restitution;
+        b.vx *= 0.995;
+      }
+    }
+
+    for (i = 0; i < balls.length; i++) {
+      for (j = i + 1; j < balls.length; j++) {
+        var a = balls[i], c = balls[j];
+        var dx = c.x - a.x, dy = c.y - a.y;
+        var dist = Math.hypot(dx, dy);
+        var minDist = a.r + c.r;
+
+        if (dist === 0 || dist >= minDist) continue;
+
+        var nx = dx / dist, ny = dy / dist;
+        var overlap = minDist - dist;
+
+        var totalM = a.m + c.m;
+        a.x -= nx * overlap * (c.m / totalM);
+        a.y -= ny * overlap * (c.m / totalM);
+        c.x += nx * overlap * (a.m / totalM);
+        c.y += ny * overlap * (a.m / totalM);
+
+        var rvx = c.vx - a.vx;
+        var rvy = c.vy - a.vy;
+        var vn = rvx * nx + rvy * ny;
+
+        if (vn > 0) continue;
+
+        var e = restitution;
+        var jImp = -(1 + e) * vn / (1 / a.m + 1 / c.m);
+
+        a.vx -= (jImp / a.m) * nx;
+        a.vy -= (jImp / a.m) * ny;
+        c.vx += (jImp / c.m) * nx;
+        c.vy += (jImp / c.m) * ny;
+
+        hits++;
+        hitsWindow++;
+      }
+    }
+  }
+
+  function draw() {
+    ctx.fillStyle = "#03050a";
+    ctx.fillRect(0, 0, W, H);
+
+    var energy = 0;
+
+    for (var i = 0; i < balls.length; i++) {
+      var b = balls[i];
+      energy += 0.5 * b.m * (b.vx * b.vx + b.vy * b.vy);
+
+      var g = ctx.createRadialGradient(b.x - b.r * 0.35, b.y - b.r * 0.35, b.r * 0.1, b.x, b.y, b.r);
+      g.addColorStop(0, "hsla(" + b.hue + ",90%,72%,0.95)");
+      g.addColorStop(1, "hsla(" + b.hue + ",75%,42%,0.95)");
+
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.r, 0, 6.283);
+      ctx.fill();
+    }
+
+    energyEl.textContent = Math.round(energy / 1000) + "k";
+  }
+
+  var last = 0, frames = 0, fpsTimer = 0, smooth = 0;
+  function loop(now) {
+    if (!fpsTimer) { fpsTimer = now; last = now; }
+    var dt = Math.min(0.033, (now - last) / 1000);
+    last = now;
+
+    var t0 = performance.now();
+
+    var sub = 2;
+    for (var s = 0; s < sub; s++) step(dt / sub);
+
+    draw();
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+
+    hitsTimer += dt;
+    if (hitsTimer > 0.5) {
+      hitsEl.textContent = Math.round(hitsWindow / hitsTimer) + " /s";
+      hitsWindow = 0;
+      hitsTimer = 0;
+    }
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      msEl.textContent = smooth.toFixed(1) + " ms / " + balls.length + " 個";
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  gravityEl.addEventListener("input", function () { gravity = Number(gravityEl.value); gravityVal.textContent = String(gravity); });
+  restEl.addEventListener("input", function () { restitution = Number(restEl.value); restVal.textContent = restitution.toFixed(2); });
+  countEl.addEventListener("input", function () {
+    targetCount = Number(countEl.value);
+    countVal.textContent = String(targetCount);
+    while (balls.length < targetCount) balls.push(makeBall());
+    if (balls.length > targetCount) balls.length = targetCount;
+  });
+  document.getElementById("reset").addEventListener("click", reset);
+
+  var dragStart = null;
+
+  canvas.addEventListener("pointerdown", function (e) {
+    var rect = canvas.getBoundingClientRect();
+    dragStart = {
+      x: (e.clientX - rect.left) / rect.width * W,
+      y: (e.clientY - rect.top) / rect.height * H
+    };
+  });
+
+  canvas.addEventListener("pointerup", function (e) {
+    if (!dragStart) return;
+    var rect = canvas.getBoundingClientRect();
+    var x = (e.clientX - rect.left) / rect.width * W;
+    var y = (e.clientY - rect.top) / rect.height * H;
+
+    var b = makeBall(dragStart.x, dragStart.y);
+    b.vx = (x - dragStart.x) * 6;
+    b.vy = (y - dragStart.y) * 6;
+    balls.push(b);
+    dragStart = null;
+  });
+
+  reset();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
