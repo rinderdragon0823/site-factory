@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FM合成 — 波で、波を揺らす。</title>
+<meta name="description" content="FM合成の可視化。搬送波の周波数を変調波で揺らすと、倍音が生まれます。波形とスペクトルで確認できます。">
+<meta property="og:title" content="FM合成 — 波で、波を揺らす。">
+<meta property="og:description" content="1つの波の周波数を、もう1つの波で揺らす。それだけで、金属的な音になります。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/fm-synth/">
+<meta property="og:site_name" content="FM合成">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --violet:#a78bfa;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #221a3d 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #101f2e 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:760px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--violet);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.35rem,5vw,1.85rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+  #view{display:block;width:100%;height:auto}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:112px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--violet);min-width:0;cursor:pointer}
+  .row output{width:70px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .readout{display:flex;gap:16px;flex-wrap:wrap;margin-top:6px;font-size:10.5px;color:var(--muted)}
+  .readout b{color:var(--ink);font-variant-numeric:tabular-nums;font-size:12.5px}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0c1119;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--violet)}
+  .actions button[aria-pressed="true"]{background:var(--violet);color:#1b1130;border-color:var(--violet)}
+  .actions button:focus-visible{outline:3px solid var(--violet);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">FM SYNTHESIS</p>
+      <h1>FM合成</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="view" width="720" height="420" role="img" aria-label="FM合成の波形とスペクトル"></canvas>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="carrier">搬送波（Hz）</label><input id="carrier" type="range" min="80" max="880" step="1" value="220"><output id="carrierVal">220</output></div>
+    <div class="row"><label for="ratio">比（mod/car）</label><input id="ratio" type="range" min="0.25" max="8" step="0.25" value="2"><output id="ratioVal">2.00</output></div>
+    <div class="row"><label for="index">変調の深さ</label><input id="index" type="range" min="0" max="10" step="0.1" value="3"><output id="indexVal">3.0</output></div>
+    <div class="readout">
+      <span>倍音 <b id="harm">0</b></span>
+      <span>状態 <b id="state">停止中</b></span>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="sound" aria-pressed="false">音を出す</button>
+  </div>
+
+  <p class="note">
+    <b>搬送波の位相を、変調波で揺らす</b>（周波数変調）。深さを上げるほど倍音が増えて、金属的・ベル的な音になります。
+    比が整数なら調和的な音、非整数だと不協和な音になります。下のスペクトルで倍音の並びが見えます。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 720, H = 420;
+  var canvas = document.getElementById("view");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var harmEl = document.getElementById("harm");
+  var stateEl = document.getElementById("state");
+  var carrierEl = document.getElementById("carrier");
+  var ratioEl = document.getElementById("ratio");
+  var indexEl = document.getElementById("index");
+  var carrierVal = document.getElementById("carrierVal");
+  var ratioVal = document.getElementById("ratioVal");
+  var indexVal = document.getElementById("indexVal");
+
+  var carrier = 220;
+  var ratio = 2;
+  var modIndex = 3;
+  var phase = 0;
+  var playing = false;
+  var audioCtx = null;
+  var osc = null, modOsc = null, modGain = null, gain = null;
+
+  function sample(t) {
+    return Math.sin(2 * Math.PI * carrier * t + modIndex * Math.sin(2 * Math.PI * carrier * ratio * t));
+  }
+
+  function draw() {
+    ctx.fillStyle = "#03050a";
+    ctx.fillRect(0, 0, W, H);
+
+    var topH = 200;
+    var midY = 100;
+    var cycles = 2;
+    var dur = cycles / carrier;
+
+    // 波形
+    ctx.strokeStyle = "rgba(167,139,250,.95)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    var N = 900;
+    for (var i = 0; i < N; i++) {
+      var t = i / N * dur;
+      var v = sample(t);
+      var x = 40 + (i / N) * (W - 80);
+      var y = midY - v * 70;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    ctx.strokeStyle = "rgba(233,239,248,.12)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(40, midY);
+    ctx.lineTo(W - 40, midY);
+    ctx.stroke();
+
+    // スペクトル（DFT, 1024点）
+    var M = 1024;
+    var sr = 8000;
+    var re = new Float32Array(M), im = new Float32Array(M);
+    for (var k = 0; k < M; k++) {
+      re[k] = sample(k / sr) * (0.5 - 0.5 * Math.cos(2 * Math.PI * k / M));
+      im[k] = 0;
+    }
+
+    // 簡易DFT（上位ビンだけ）
+    var bins = 64;
+    var mags = new Float32Array(bins);
+    for (var b = 1; b < bins; b++) {
+      var sr2 = 0, si = 0;
+      for (var n = 0; n < M; n += 4) {
+        var ang = -2 * Math.PI * b * n / M;
+        sr2 += re[n] * Math.cos(ang);
+        si += re[n] * Math.sin(ang);
+      }
+      mags[b] = Math.hypot(sr2, si);
+    }
+
+    var peak = 1e-6;
+    for (var m = 1; m < bins; m++) if (mags[m] > peak) peak = mags[m];
+
+    var baseY = H - 40;
+    var maxH = 130;
+    var bw = (W - 80) / bins;
+    var harmonics = 0;
+
+    for (var q = 1; q < bins; q++) {
+      var v2 = mags[q] / peak;
+      if (v2 > 0.06) harmonics++;
+      var h = v2 * maxH;
+      var x2 = 40 + q * bw;
+      ctx.fillStyle = "hsla(" + (260 + v2 * 60) + ",85%,65%," + (0.35 + v2 * 0.6) + ")";
+      ctx.fillRect(x2 + 1, baseY - h, bw - 2, h);
+    }
+
+    harmEl.textContent = String(harmonics);
+  }
+
+  var frames = 0, fpsTimer = 0, smooth = 0;
+  function loop(now) {
+    if (!fpsTimer) fpsTimer = now;
+    var t0 = performance.now();
+    draw();
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      msEl.textContent = smooth.toFixed(1) + " ms";
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  function startAudio() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+
+    osc = audioCtx.createOscillator();
+    modOsc = audioCtx.createOscillator();
+    modGain = audioCtx.createGain();
+    gain = audioCtx.createGain();
+
+    osc.type = "sine";
+    modOsc.type = "sine";
+    osc.frequency.value = carrier;
+    modOsc.frequency.value = carrier * ratio;
+    modGain.gain.value = modIndex * carrier * ratio;
+    gain.gain.value = 0.12;
+
+    modOsc.connect(modGain);
+    modGain.connect(osc.frequency);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    osc.start();
+    modOsc.start();
+  }
+
+  function stopAudio() {
+    try { if (osc) osc.stop(); } catch (e) {}
+    try { if (modOsc) modOsc.stop(); } catch (e) {}
+    osc = modOsc = null;
+  }
+
+  carrierEl.addEventListener("input", function () {
+    carrier = Number(carrierEl.value);
+    carrierVal.textContent = String(carrier);
+    if (osc) osc.frequency.value = carrier;
+    if (modOsc) modOsc.frequency.value = carrier * ratio;
+    if (modGain) modGain.gain.value = modIndex * carrier * ratio;
+  });
+  ratioEl.addEventListener("input", function () {
+    ratio = Number(ratioEl.value);
+    ratioVal.textContent = ratio.toFixed(2);
+    if (modOsc) modOsc.frequency.value = carrier * ratio;
+    if (modGain) modGain.gain.value = modIndex * carrier * ratio;
+  });
+  indexEl.addEventListener("input", function () {
+    modIndex = Number(indexEl.value);
+    indexVal.textContent = modIndex.toFixed(1);
+    if (modGain) modGain.gain.value = modIndex * carrier * ratio;
+  });
+
+  document.getElementById("sound").addEventListener("click", function () {
+    playing = !playing;
+    this.setAttribute("aria-pressed", playing ? "true" : "false");
+    if (playing) {
+      startAudio();
+      stateEl.textContent = "発音中";
+    } else {
+      stopAudio();
+      stateEl.textContent = "停止中";
+    }
+  });
+
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
