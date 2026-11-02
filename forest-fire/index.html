@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>山火事 — 燃えて、また生える。</title>
+<meta name="description" content="森林火災のセルオートマトン。木が生え、雷で燃え、延焼して、また生える。その繰り返しを眺めます。">
+<meta property="og:title" content="山火事 — 燃えて、また生える。">
+<meta property="og:description" content="木が生える、雷が落ちる、燃え広がる、灰になる。それだけの規則で森は揺れ続けます。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/forest-fire/">
+<meta property="og:site_name" content="山火事">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --lime:#a3e635;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #1b2a12 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #101a33 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:760px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--lime);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.4rem,5.2vw,1.9rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+  #view{display:block;width:100%;height:auto}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:112px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--lime);min-width:0;cursor:pointer}
+  .row output{width:66px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .readout{display:flex;gap:16px;flex-wrap:wrap;margin-top:6px;font-size:10.5px;color:var(--muted)}
+  .readout b{color:var(--ink);font-variant-numeric:tabular-nums;font-size:12.5px}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0c1119;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--lime)}
+  .actions button:focus-visible{outline:3px solid var(--lime);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">FOREST FIRE AUTOMATON</p>
+      <h1>山火事</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="view" width="640" height="480" role="img" aria-label="森と火のセルオートマトン"></canvas>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="grow">木の生えやすさ</label><input id="grow" type="range" min="0.001" max="0.02" step="0.001" value="0.006"><output id="growVal">0.006</output></div>
+    <div class="row"><label for="bolt">雷の確率</label><input id="bolt" type="range" min="0" max="0.004" step="0.0002" value="0.0012"><output id="boltVal">0.0012</output></div>
+    <div class="row"><label for="spread">延焼しやすさ</label><input id="spread" type="range" min="0.1" max="1" step="0.05" value="0.62"><output id="spreadVal">0.62</output></div>
+    <div class="readout">
+      <span>森 <b id="forest">0%</b></span>
+      <span>燃えている <b id="burning">0</b></span>
+      <span>ステップ <b id="steps">0</b></span>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="pause">停止</button>
+    <button type="button" id="reset">リセット</button>
+  </div>
+
+  <p class="note">
+    <b>空き地→木（確率）、雷→発火、火→隣の木へ延焼、燃え尽きたら空き地</b>。この4つの規則だけです。
+    木が密になりすぎると大火事が起き、燃えたあとはまた若い森になります。パラメータを変えると、その周期が変わります。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 640, H = 480;
+  var GW = 160, GH = 120;
+  var canvas = document.getElementById("view");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var off = document.createElement("canvas");
+  off.width = GW;
+  off.height = GH;
+  var octx = off.getContext("2d");
+  var img = octx.createImageData(GW, GH);
+
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var forestEl = document.getElementById("forest");
+  var burningEl = document.getElementById("burning");
+  var stepsEl = document.getElementById("steps");
+  var growEl = document.getElementById("grow");
+  var boltEl = document.getElementById("bolt");
+  var spreadEl = document.getElementById("spread");
+  var growVal = document.getElementById("growVal");
+  var boltVal = document.getElementById("boltVal");
+  var spreadVal = document.getElementById("spreadVal");
+
+  var EMPTY = 0, TREE = 1, FIRE = 2;
+  var cells = new Uint8Array(GW * GH);
+  var grow = 0.006;
+  var bolt = 0.0012;
+  var spread = 0.62;
+  var steps = 0;
+  var running = true;
+
+  function reset() {
+    cells.fill(EMPTY);
+    for (var i = 0; i < cells.length; i++) {
+      if (Math.random() < 0.65) cells[i] = TREE;
+    }
+    steps = 0;
+  }
+
+  function step() {
+    var n = cells.length;
+    for (var i = 0; i < n; i++) {
+      if (cells[i] === EMPTY && Math.random() < grow) {
+        cells[i] = TREE;
+      } else if (cells[i] === TREE && Math.random() < bolt) {
+        cells[i] = FIRE;
+      }
+    }
+
+    // 延焼（同時更新のためコピー）
+    var next = Uint8Array.from(cells);
+
+    for (var y = 0; y < GH; y++) {
+      for (var x = 0; x < GW; x++) {
+        var idx = y * GW + x;
+        if (cells[idx] !== FIRE) continue;
+
+        var neighbors = [
+          x > 0 ? idx - 1 : -1,
+          x < GW - 1 ? idx + 1 : -1,
+          y > 0 ? idx - GW : -1,
+          y < GH - 1 ? idx + GW : -1
+        ];
+
+        for (var k = 0; k < 4; k++) {
+          var j = neighbors[k];
+          if (j >= 0 && cells[j] === TREE && Math.random() < spread) {
+            next[j] = FIRE;
+          }
+        }
+
+        // 燃え尽きる
+        if (Math.random() < 0.35) next[idx] = EMPTY;
+      }
+    }
+
+    cells = next;
+    steps++;
+  }
+
+  function render() {
+    var d = img.data;
+    var p = 0;
+    var trees = 0;
+    var fires = 0;
+
+    for (var i = 0; i < cells.length; i++) {
+      var c = cells[i];
+      if (c === TREE) {
+        trees++;
+        var t = 70 + ((i * 37) % 30);
+        d[p] = 40; d[p + 1] = t + 90; d[p + 2] = 45;
+      } else if (c === FIRE) {
+        fires++;
+        var flick = 180 + Math.random() * 75;
+        d[p] = 250; d[p + 1] = flick * 0.55; d[p + 2] = 30;
+      } else {
+        d[p] = 12; d[p + 1] = 14; d[p + 2] = 12;
+      }
+      d[p + 3] = 255;
+      p += 4;
+    }
+
+    octx.putImageData(img, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(off, 0, 0, W, H);
+
+    forestEl.textContent = Math.round(trees / cells.length * 100) + "%";
+    burningEl.textContent = String(fires);
+    stepsEl.textContent = String(steps);
+  }
+
+  var frames = 0, fpsTimer = 0, smooth = 0;
+  function loop(now) {
+    if (!fpsTimer) fpsTimer = now;
+    var t0 = performance.now();
+    if (running) step();
+    render();
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+
+    msEl.textContent = smooth.toFixed(1) + " ms / " + GW + "×" + GH;
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  growEl.addEventListener("input", function () { grow = Number(growEl.value); growVal.textContent = grow.toFixed(3); });
+  boltEl.addEventListener("input", function () { bolt = Number(boltEl.value); boltVal.textContent = bolt.toFixed(4); });
+  spreadEl.addEventListener("input", function () { spread = Number(spreadEl.value); spreadVal.textContent = spread.toFixed(2); });
+
+  document.getElementById("pause").addEventListener("click", function () {
+    running = !running;
+    this.textContent = running ? "停止" : "再開";
+  });
+  document.getElementById("reset").addEventListener("click", reset);
+
+  reset();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
