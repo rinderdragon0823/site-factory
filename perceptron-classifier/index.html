@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>パーセプトロン — 線を引いて、分ける。</title>
+<meta name="description" content="パーセプトロンの学習を可視化。間違えた点だけを使って重みを直し、境界線が動いていきます。">
+<meta property="og:title" content="パーセプトロン — 線を引いて、分ける。">
+<meta property="og:description" content="間違えた点があったら、その点の方向に線を動かす。それだけで分類できるようになります。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/perceptron-classifier/">
+<meta property="og:site_name" content="パーセプトロン">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --cyan:#67e8f9;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #0f2633 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #1a1430 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:720px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--cyan);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.4rem,5.2vw,1.9rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+  #view{display:block;width:100%;height:auto}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:112px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--cyan);min-width:0;cursor:pointer}
+  .row output{width:64px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .readout{display:flex;gap:16px;flex-wrap:wrap;margin-top:6px;font-size:10.5px;color:var(--muted)}
+  .readout b{color:var(--ink);font-variant-numeric:tabular-nums;font-size:12.5px}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0c1119;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--cyan)}
+  .actions button:focus-visible{outline:3px solid var(--cyan);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">PERCEPTRON</p>
+      <h1>パーセプトロン</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="view" width="640" height="480" role="img" aria-label="2クラスの点と決定境界"></canvas>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="lr">学習率</label><input id="lr" type="range" min="0.01" max="0.5" step="0.01" value="0.08"><output id="lrVal">0.08</output></div>
+    <div class="row"><label for="noise">ノイズ</label><input id="noise" type="range" min="0" max="0.45" step="0.01" value="0.12"><output id="noiseVal">0.12</output></div>
+    <div class="readout">
+      <span>精度 <b id="acc">0%</b></span>
+      <span>誤分類 <b id="miss">0</b></span>
+      <span>更新 <b id="upd">0</b></span>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="regen">点を引き直す</button>
+    <button type="button" id="rew">重みをリセット</button>
+  </div>
+
+  <p class="note">
+    <b>間違えた点を見つけたら、その点の方向へ重みを動かす</b>（w ← w + ηy·x）。正しく分けられるまで繰り返すと、境界線が落ち着きます。
+    ノイズを増やすと完全には分けられなくなります（線形分離できない）。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 640, H = 480;
+  var canvas = document.getElementById("view");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var accEl = document.getElementById("acc");
+  var missEl = document.getElementById("miss");
+  var updEl = document.getElementById("upd");
+  var lrEl = document.getElementById("lr");
+  var noiseEl = document.getElementById("noise");
+  var lrVal = document.getElementById("lrVal");
+  var noiseVal = document.getElementById("noiseVal");
+
+  var N = 240;
+  var pts = [];
+  var lr = 0.08;
+  var noise = 0.12;
+  var w = [0, 0];
+  var b = 0;
+  var updates = 0;
+
+  function randn() {
+    var u = 0, v = 0;
+    while (u === 0) u = Math.random();
+    while (v === 0) v = Math.random();
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  }
+
+  function regenerate() {
+    pts = [];
+    var angle = Math.random() * Math.PI;
+    var nx = Math.cos(angle), ny = Math.sin(angle);
+
+    for (var i = 0; i < N; i++) {
+      var x = Math.random() * 2 - 1;
+      var y = Math.random() * 2 - 1;
+      var side = x * nx + y * ny;
+      var label = side >= 0 ? 1 : -1;
+      if (Math.random() < noise) label = -label;
+      pts.push({ x: x + randn() * 0.03, y: y + randn() * 0.03, y0: label });
+    }
+    w = [0, 0];
+    b = 0;
+    updates = 0;
+  }
+
+  function predict(p) {
+    return (w[0] * p.x + w[1] * p.y + b) >= 0 ? 1 : -1;
+  }
+
+  function trainStep() {
+    var wrong = [];
+    for (var i = 0; i < pts.length; i++) {
+      if (predict(pts[i]) !== pts[i].y0) wrong.push(pts[i]);
+    }
+    if (!wrong.length) return false;
+    var p = wrong[(Math.random() * wrong.length) | 0];
+    w[0] += lr * p.y0 * p.x;
+    w[1] += lr * p.y0 * p.y;
+    b += lr * p.y0;
+    updates++;
+    return true;
+  }
+
+  function draw() {
+    ctx.fillStyle = "#03050a";
+    ctx.fillRect(0, 0, W, H);
+
+    var cx = W / 2, cy = H / 2;
+    var scale = Math.min(W, H) * 0.42;
+
+    // 背景（決定境界の符号）
+    var step = 10;
+    for (var py = 0; py < H; py += step) {
+      for (var px = 0; px < W; px += step) {
+        var nx = (px - cx) / scale;
+        var ny = -(py - cy) / scale;
+        var v = w[0] * nx + w[1] * ny + b;
+        ctx.fillStyle = v >= 0 ? "rgba(103,232,249,0.055)" : "rgba(249,168,212,0.055)";
+        ctx.fillRect(px, py, step, step);
+      }
+    }
+
+    // 点
+    var wrongCount = 0;
+    for (var i = 0; i < pts.length; i++) {
+      var p = pts[i];
+      var sx = cx + p.x * scale;
+      var sy = cy - p.y * scale;
+      var pred = predict(p);
+      var wrong = pred !== p.y0;
+      if (wrong) wrongCount++;
+
+      ctx.fillStyle = p.y0 > 0 ? "rgba(103,232,249,.9)" : "rgba(249,168,212,.9)";
+      ctx.beginPath();
+      ctx.arc(sx, sy, 3.2, 0, 6.283);
+      ctx.fill();
+
+      if (wrong) {
+        ctx.strokeStyle = "rgba(255,255,255,.7)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(sx, sy, 6, 0, 6.283);
+        ctx.stroke();
+      }
+    }
+
+    // 境界線: w0*x + w1*y + b = 0
+    if (Math.abs(w[1]) > 1e-6) {
+      var x1 = -1.2, x2 = 1.2;
+      var y1 = -(w[0] * x1 + b) / w[1];
+      var y2 = -(w[0] * x2 + b) / w[1];
+      ctx.strokeStyle = "#fde68a";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(cx + x1 * scale, cy - y1 * scale);
+      ctx.lineTo(cx + x2 * scale, cy - y2 * scale);
+      ctx.stroke();
+    } else if (Math.abs(w[0]) > 1e-6) {
+      var xv = -b / w[0];
+      ctx.strokeStyle = "#fde68a";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(cx + xv * scale, 0);
+      ctx.lineTo(cx + xv * scale, H);
+      ctx.stroke();
+    }
+
+    var acc = (1 - wrongCount / pts.length) * 100;
+    accEl.textContent = acc.toFixed(1) + "%";
+    missEl.textContent = String(wrongCount);
+    updEl.textContent = String(updates);
+  }
+
+  var frames = 0, fpsTimer = 0, smooth = 0;
+  function loop(now) {
+    if (!fpsTimer) fpsTimer = now;
+    var t0 = performance.now();
+
+    for (var s = 0; s < 20; s++) trainStep();
+    draw();
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+
+    msEl.textContent = smooth.toFixed(1) + " ms / " + N + " 点";
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  lrEl.addEventListener("input", function () { lr = Number(lrEl.value); lrVal.textContent = lr.toFixed(2); });
+  noiseEl.addEventListener("input", function () { noise = Number(noiseEl.value); noiseVal.textContent = noise.toFixed(2); regenerate(); });
+  document.getElementById("regen").addEventListener("click", regenerate);
+  document.getElementById("rew").addEventListener("click", function () { w = [0, 0]; b = 0; updates = 0; });
+
+  regenerate();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
