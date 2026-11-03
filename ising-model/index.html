@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>イジング模型 — 温度で、そろう。</title>
+<meta name="description" content="2次元イジング模型のモンテカルロ・シミュレーション。温度を上げると秩序が壊れ、下げるとドメインが育ちます。">
+<meta property="og:title" content="イジング模型 — 温度で、そろう。">
+<meta property="og:description" content="スピンを1つ選んで、ひっくり返すかどうかを確率で決める。それだけで相転移が現れます。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/ising-model/">
+<meta property="og:site_name" content="イジング模型">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --amber:#fbbf24;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #2a2110 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #141a33 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:720px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--amber);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.4rem,5.2vw,1.9rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+  #view{display:block;width:100%;height:auto;image-rendering:pixelated}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:112px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--amber);min-width:0;cursor:pointer}
+  .row output{width:66px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .readout{display:flex;gap:16px;flex-wrap:wrap;margin-top:6px;font-size:10.5px;color:var(--muted)}
+  .readout b{color:var(--ink);font-variant-numeric:tabular-nums;font-size:12.5px}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0c1119;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--amber)}
+  .actions button:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">ISING MODEL / METROPOLIS</p>
+      <h1>イジング模型</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="view" width="640" height="480" role="img" aria-label="スピンの秩序とゆらぎ"></canvas>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="temp">温度 T</label><input id="temp" type="range" min="0.4" max="4.5" step="0.05" value="2.4"><output id="tempVal">2.40</output></div>
+    <div class="row"><label for="rate">1フレームの試行</label><input id="rate" type="range" min="500" max="20000" step="500" value="6000"><output id="rateVal">6000</output></div>
+    <div class="readout">
+      <span>磁化 |M| <b id="mag">0.00</b></span>
+      <span>エネルギー <b id="energy">0</b></span>
+      <span>スピン <b id="spins">0</b></span>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="pause">停止</button>
+    <button type="button" id="reset">リセット</button>
+  </div>
+
+  <p class="note">
+    <b>スピンを1つ選び、隣4つとの和を計算して、反転したときのエネルギー差 ΔE を出す</b>。ΔE ≤ 0 なら反転、正なら確率 exp(−ΔE/T) で反転（メトロポリス法）。
+    低温ではそろって大きな島になり、約 2.27 を超えるとバラバラになります（2次元イジングの相転移）。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var GW = 160, GH = 120;
+  var canvas = document.getElementById("view");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  var off = document.createElement("canvas");
+  off.width = GW;
+  off.height = GH;
+  var octx = off.getContext("2d");
+  var img = octx.createImageData(GW, GH);
+
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var magEl = document.getElementById("mag");
+  var energyEl = document.getElementById("energy");
+  var spinsEl = document.getElementById("spins");
+  var tempEl = document.getElementById("temp");
+  var rateEl = document.getElementById("rate");
+  var tempVal = document.getElementById("tempVal");
+  var rateVal = document.getElementById("rateVal");
+
+  var T = 2.4;
+  var trials = 6000;
+  var spins = new Int8Array(GW * GH);
+  var running = true;
+
+  function reset() {
+    for (var i = 0; i < spins.length; i++) spins[i] = Math.random() < 0.5 ? 1 : -1;
+  }
+
+  function neighborSum(x, y) {
+    var s = 0;
+    s += spins[y * GW + (x === 0 ? GW - 1 : x - 1)];
+    s += spins[y * GW + (x === GW - 1 ? 0 : x + 1)];
+    s += spins[(y === 0 ? GH - 1 : y - 1) * GW + x];
+    s += spins[(y === GH - 1 ? 0 : y + 1) * GW + x];
+    return s;
+  }
+
+  function step() {
+    for (var k = 0; k < trials; k++) {
+      var x = (Math.random() * GW) | 0;
+      var y = (Math.random() * GH) | 0;
+      var i = y * GW + x;
+      var s = spins[i];
+      var sum = neighborSum(x, y);
+      var dE = 2 * s * sum;
+      if (dE <= 0 || Math.random() < Math.exp(-dE / T)) {
+        spins[i] = -s;
+      }
+    }
+  }
+
+  function render() {
+    var d = img.data;
+    var p = 0;
+    var m = 0;
+
+    for (var i = 0; i < spins.length; i++) {
+      var s = spins[i];
+      m += s;
+      if (s > 0) {
+        d[p] = 250; d[p + 1] = 236; d[p + 2] = 180;
+      } else {
+        d[p] = 40; d[p + 1] = 48; d[p + 2] = 96;
+      }
+      d[p + 3] = 255;
+      p += 4;
+    }
+
+    octx.putImageData(img, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(off, 0, 0, 640, 480);
+
+    magEl.textContent = (Math.abs(m) / spins.length).toFixed(2);
+    spinsEl.textContent = String(spins.length);
+  }
+
+  function computeEnergy() {
+    var e = 0;
+    for (var y = 0; y < GH; y++) {
+      for (var x = 0; x < GW; x++) {
+        var i = y * GW + x;
+        e -= spins[i] * neighborSum(x, y);
+      }
+    }
+    energyEl.textContent = String(Math.round(e / 2));
+  }
+
+  var frames = 0, fpsTimer = 0, smooth = 0;
+  function loop(now) {
+    if (!fpsTimer) fpsTimer = now;
+    var t0 = performance.now();
+
+    if (running) step();
+    render();
+    if (frames % 30 === 0) computeEnergy();
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+
+    msEl.textContent = smooth.toFixed(1) + " ms / " + GW + "×" + GH;
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  tempEl.addEventListener("input", function () { T = Number(tempEl.value); tempVal.textContent = T.toFixed(2); });
+  rateEl.addEventListener("input", function () { trials = Number(rateEl.value); rateVal.textContent = String(trials); });
+
+  document.getElementById("pause").addEventListener("click", function () {
+    running = !running;
+    this.textContent = running ? "停止" : "再開";
+  });
+  document.getElementById("reset").addEventListener("click", reset);
+
+  reset();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
