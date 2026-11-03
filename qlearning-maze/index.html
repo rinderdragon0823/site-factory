@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Q学習 — 試して、覚える。</title>
+<meta name="description" content="Q学習の可視化。迷路の中で報酬を手がかりに価値を学び、最短経路を見つけていきます。">
+<meta property="og:title" content="Q学習 — 試して、覚える。">
+<meta property="og:description" content="行動して、報酬を得て、価値を少しずつ更新する。それだけで迷路を解けるようになります。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/qlearning-maze/">
+<meta property="og:site_name" content="Q学習">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --mint:#6ee7b7;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #10281e 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #141a33 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:720px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--mint);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.4rem,5.2vw,1.9rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+  #view{display:block;width:100%;height:auto}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:112px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--mint);min-width:0;cursor:pointer}
+  .row output{width:66px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .readout{display:flex;gap:16px;flex-wrap:wrap;margin-top:6px;font-size:10.5px;color:var(--muted)}
+  .readout b{color:var(--ink);font-variant-numeric:tabular-nums;font-size:12.5px}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0c1119;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--mint)}
+  .actions button:focus-visible{outline:3px solid var(--mint);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">Q-LEARNING</p>
+      <h1>Q学習</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="view" width="720" height="480" role="img" aria-label="Q学習で迷路を解く"></canvas>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="alpha">学習率 α</label><input id="alpha" type="range" min="0.02" max="0.9" step="0.02" value="0.18"><output id="alphaVal">0.18</output></div>
+    <div class="row"><label for="gamma">割引率 γ</label><input id="gamma" type="range" min="0.5" max="0.99" step="0.01" value="0.94"><output id="gammaVal">0.94</output></div>
+    <div class="row"><label for="eps">探索率 ε</label><input id="eps" type="range" min="0" max="0.5" step="0.01" value="0.12"><output id="epsVal">0.12</output></div>
+    <div class="readout">
+      <span>エピソード <b id="eps_cnt">0</b></span>
+      <span>成功率 <b id="succ">0%</b></span>
+      <span>いまの歩数 <b id="stepcnt">0</b></span>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="pause">停止</button>
+    <button type="button" id="reset">学習をリセット</button>
+  </div>
+
+  <p class="note">
+    <b>状態で行動を選び、報酬と「次の状態の最大価値」で Q 値を更新する</b>（Q(s,a) ← Q + α(r + γ·max Q′ − Q)）。
+    色はそのマスの最大 Q 値、矢印は一番価値の高い行動です。試行を重ねるほど、ゴールへの道が濃くなります。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 720, H = 480;
+  var GW = 14, GH = 10;
+  var canvas = document.getElementById("view");
+  var ctx = canvas.getContext("2d", { alpha: false });
+
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var epsCntEl = document.getElementById("eps_cnt");
+  var succEl = document.getElementById("succ");
+  var stepCntEl = document.getElementById("stepcnt");
+  var alphaEl = document.getElementById("alpha");
+  var gammaEl = document.getElementById("gamma");
+  var epsEl = document.getElementById("eps");
+  var alphaVal = document.getElementById("alphaVal");
+  var gammaVal = document.getElementById("gammaVal");
+  var epsVal = document.getElementById("epsVal");
+
+  var alpha = 0.18;
+  var gamma = 0.94;
+  var epsilon = 0.12;
+
+  var walls = new Uint8Array(GW * GH);
+  var q = new Float32Array(GW * GH * 4);
+  var start = 0;
+  var goal = GW * GH - 1;
+  var agent = start;
+  var episodes = 0;
+  var steps = 0;
+  var successWindow = [];
+  var trail = [];
+  var running = true;
+
+  var DX = [0, 0, -1, 1];
+  var DY = [-1, 1, 0, 0];
+
+  function buildWalls() {
+    walls.fill(0);
+    // 縦の壁（隙間つき）
+    for (var y = 1; y < GH - 1; y++) {
+      if (y !== 3 && y !== 7) walls[y * GW + 4] = 1;
+      if (y !== 2 && y !== 6) walls[y * GW + 9] = 1;
+    }
+    for (var x = 2; x < 5; x++) walls[5 * GW + x] = 1;
+    for (var x2 = 10; x2 < 13; x2++) walls[2 * GW + x2] = 1;
+    for (var x3 = 6; x3 < 9; x3++) walls[7 * GW + x3] = 1;
+  }
+
+  function reset() {
+    buildWalls();
+    q.fill(0);
+    agent = start;
+    episodes = 0;
+    steps = 0;
+    successWindow = [];
+    trail = [];
+  }
+
+  function idx(x, y) { return y * GW + x; }
+
+  function maxQ(s) {
+    var m = q[s * 4];
+    for (var a = 1; a < 4; a++) if (q[s * 4 + a] > m) m = q[s * 4 + a];
+    return m;
+  }
+
+  function bestAction(s) {
+    var b = 0;
+    for (var a = 1; a < 4; a++) if (q[s * 4 + a] > q[s * 4 + b]) b = a;
+    return b;
+  }
+
+  function learnStep() {
+    var x = agent % GW;
+    var y = (agent / GW) | 0;
+
+    var a;
+    if (Math.random() < epsilon) {
+      a = (Math.random() * 4) | 0;
+    } else {
+      a = bestAction(agent);
+    }
+
+    var nx = x + DX[a];
+    var ny = y + DY[a];
+    var reward = -0.01;
+    var next = agent;
+
+    if (nx < 0 || ny < 0 || nx >= GW || ny >= GH || walls[idx(nx, ny)]) {
+      reward = -0.3;
+    } else {
+      next = idx(nx, ny);
+    }
+
+    if (next === goal) {
+      reward = 1.0;
+    }
+
+    var target = reward + gamma * maxQ(next) * (next === goal ? 0 : 1);
+    q[agent * 4 + a] += alpha * (target - q[agent * 4 + a]);
+
+    agent = next;
+    steps++;
+
+    if (agent === goal) {
+      episodes++;
+      successWindow.push(steps);
+      if (successWindow.length > 40) successWindow.shift();
+      steps = 0;
+      agent = start;
+      trail = [];
+    }
+
+    trail.push(agent);
+    if (trail.length > 80) trail.shift();
+  }
+
+  function draw() {
+    ctx.fillStyle = "#03050a";
+    ctx.fillRect(0, 0, W, H);
+
+    var cell = Math.min((W - 80) / GW, (H - 120) / GH);
+    var ox = (W - cell * GW) / 2;
+    var oy = (H - cell * GH) / 2 + 10;
+
+    var maxVal = 0.0001;
+    for (var i = 0; i < GW * GH; i++) {
+      if (walls[i]) continue;
+      var m = maxQ(i);
+      if (m > maxVal) maxVal = m;
+    }
+
+    for (var y2 = 0; y2 < GH; y2++) {
+      for (var x2 = 0; x2 < GW; x2++) {
+        var s = idx(x2, y2);
+        var px = ox + x2 * cell;
+        var py = oy + y2 * cell;
+
+        if (walls[s]) {
+          ctx.fillStyle = "rgba(233,239,248,.16)";
+          ctx.fillRect(px, py, cell - 1, cell - 1);
+          continue;
+        }
+
+        var v = Math.max(0, maxQ(s)) / maxVal;
+        var hue = 165 - v * 120;
+        ctx.fillStyle = "hsla(" + hue + ",70%," + (12 + v * 45) + "%," + (0.55 + v * 0.45) + ")";
+        ctx.fillRect(px, py, cell - 1, cell - 1);
+
+        // 最良行動の矢印
+        var a = bestAction(s);
+        if (q[s * 4 + a] !== 0) {
+          ctx.strokeStyle = "rgba(255,255,255," + (0.15 + v * 0.6) + ")";
+          ctx.lineWidth = 1.4;
+          var cx = px + cell / 2;
+          var cy = py + cell / 2;
+          var len = cell * 0.26;
+          ctx.beginPath();
+          ctx.moveTo(cx - DX[a] * len, cy - DY[a] * len);
+          ctx.lineTo(cx + DX[a] * len, cy + DY[a] * len);
+          ctx.stroke();
+        }
+      }
+    }
+
+    // ゴール
+    var gx = ox + (goal % GW) * cell;
+    var gy = oy + Math.floor(goal / GW) * cell;
+    ctx.fillStyle = "#fcd34d";
+    ctx.fillRect(gx + 3, gy + 3, cell - 7, cell - 7);
+
+    // 軌跡
+    ctx.fillStyle = "rgba(110,231,183,.35)";
+    for (var t = 0; t < trail.length; t++) {
+      var ts = trail[t];
+      ctx.fillRect(ox + (ts % GW) * cell + cell * 0.38, oy + Math.floor(ts / GW) * cell + cell * 0.38, cell * 0.24, cell * 0.24);
+    }
+
+    // エージェント
+    ctx.fillStyle = "#6ee7b7";
+    ctx.beginPath();
+    ctx.arc(ox + (agent % GW) * cell + cell / 2, oy + Math.floor(agent / GW) * cell + cell / 2, cell * 0.28, 0, 6.283);
+    ctx.fill();
+
+    epsCntEl.textContent = String(episodes);
+    var avg = 0;
+    for (var k = 0; k < successWindow.length; k++) avg += successWindow[k];
+    succEl.textContent = successWindow.length ? Math.round(avg / successWindow.length) + " 歩" : "—";
+    stepCntEl.textContent = String(steps);
+  }
+
+  var frames = 0, fpsTimer = 0, smooth = 0;
+  function loop(now) {
+    if (!fpsTimer) fpsTimer = now;
+    var t0 = performance.now();
+
+    if (running) {
+      for (var s = 0; s < 60; s++) learnStep();
+    }
+    draw();
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+
+    msEl.textContent = smooth.toFixed(1) + " ms / " + GW + "×" + GH;
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  alphaEl.addEventListener("input", function () { alpha = Number(alphaEl.value); alphaVal.textContent = alpha.toFixed(2); });
+  gammaEl.addEventListener("input", function () { gamma = Number(gammaEl.value); gammaVal.textContent = gamma.toFixed(2); });
+  epsEl.addEventListener("input", function () { epsilon = Number(epsEl.value); epsVal.textContent = epsilon.toFixed(2); });
+
+  document.getElementById("pause").addEventListener("click", function () {
+    running = !running;
+    this.textContent = running ? "停止" : "再開";
+  });
+  document.getElementById("reset").addEventListener("click", reset);
+
+  reset();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
