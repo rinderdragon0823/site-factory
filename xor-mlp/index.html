@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>XOR — 線では解けない問題。</title>
+<meta name="description" content="パーセプトロンには解けないXORを、隠れ層のあるニューラルネットが学ぶ様子を可視化します。">
+<meta property="og:title" content="XOR — 線では解けない問題。">
+<meta property="og:description" content="1本の線では分けられない。隠れ層を入れると、折れ曲がった境界が描けるようになります。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://rinderdragon0823.github.io/site-factory/xor-mlp/">
+<meta property="og:site_name" content="XOR">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#05070c">
+<style>
+  :root{
+    --bg:#05070c;
+    --panel:#0c1119;
+    --ink:#e9eff8;
+    --muted:rgba(233,239,248,.56);
+    --mint:#6ee7b7;
+    --line:rgba(233,239,248,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(900px 520px at 90% -10%, #10281e 0%, transparent 60%),
+      radial-gradient(700px 420px at 0% 110%, #141a33 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-text-size-adjust:100%;
+    min-height:100dvh;
+    display:flex;flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .wrap{max-width:720px;margin:auto;width:100%;padding:18px 16px calc(24px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 2px}
+  .kicker{margin:0;font-size:10px;letter-spacing:.28em;color:var(--mint);font-weight:800}
+  h1{margin:.24em 0 0;font-size:clamp(1.4rem,5.2vw,1.9rem);letter-spacing:-.02em;line-height:1.1}
+  .stats{text-align:right;font-size:10px;color:var(--muted);letter-spacing:.08em;font-weight:800;line-height:1.7}
+  .stats b{display:block;font-size:15px;color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+
+  .stage{margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#03050a;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+  #view{display:block;width:100%;height:auto}
+
+  .panel{margin-top:10px;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:5px 0}
+  .row label{width:112px;flex:none;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted)}
+  .row input[type=range]{flex:1;accent-color:var(--mint);min-width:0;cursor:pointer}
+  .row output{width:64px;flex:none;text-align:right;font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+
+  .readout{display:flex;gap:16px;flex-wrap:wrap;margin-top:6px;font-size:10.5px;color:var(--muted)}
+  .readout b{color:var(--ink);font-variant-numeric:tabular-nums;font-size:12.5px}
+
+  .actions{display:flex;gap:8px;margin-top:10px}
+  .actions button{
+    flex:1;font:inherit;font-size:12px;font-weight:800;
+    color:var(--ink);background:#0c1119;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px;min-height:44px;cursor:pointer;
+  }
+  .actions button:hover{border-color:var(--mint)}
+  .actions button:focus-visible{outline:3px solid var(--mint);outline-offset:2px}
+
+  .note{margin:10px 0 0;font-size:10.5px;color:rgba(233,239,248,.42);line-height:1.8}
+  .note b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <p class="kicker">MULTILAYER PERCEPTRON</p>
+      <h1>XOR</h1>
+    </div>
+    <div class="stats">
+      <span>FPS <b id="fps">0</b></span>
+      <span id="ms">0.0 ms</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="view" width="720" height="480" role="img" aria-label="XORを学ぶニューラルネットの決定境界"></canvas>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label for="lr">学習率</label><input id="lr" type="range" min="0.05" max="3" step="0.05" value="0.6"><output id="lrVal">0.60</output></div>
+    <div class="row"><label for="hid">隠れ層の数</label><input id="hid" type="range" min="1" max="8" step="1" value="4"><output id="hidVal">4</output></div>
+    <div class="readout">
+      <span>損失 <b id="loss">0.000</b></span>
+      <span>正解 <b id="hit">0/4</b></span>
+      <span>ステップ <b id="steps">0</b></span>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="reset">学習をリセット</button>
+  </div>
+
+  <p class="note">
+    <b>入力2つ → 隠れ層（tanh）→ 出力1つ（シグモイド）</b>。誤差逆伝播で全結合の重みを更新します。
+    パーセプトロン（線形）では XOR は絶対に分けられませんが、隠れ層を入れると境界が折れ曲がって分けられるようになります。背景の色が「1である確率」です。
+  </p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var W = 720, H = 480;
+  var canvas = document.getElementById("view");
+  var ctx = canvas.getContext("2d", { alpha: false });
+
+  var fpsEl = document.getElementById("fps");
+  var msEl = document.getElementById("ms");
+  var lossEl = document.getElementById("loss");
+  var hitEl = document.getElementById("hit");
+  var stepsEl = document.getElementById("steps");
+  var lrEl = document.getElementById("lr");
+  var hidEl = document.getElementById("hid");
+  var lrVal = document.getElementById("lrVal");
+  var hidVal = document.getElementById("hidVal");
+
+  var lr = 0.6;
+  var HID = 4;
+  var w1, b1, w2, b2;
+  var steps = 0;
+  var lossHistory = [];
+
+  var DATA = [
+    { x: -1, y: -1, t: 0 },
+    { x: -1, y: 1, t: 1 },
+    { x: 1, y: -1, t: 1 },
+    { x: 1, y: 1, t: 0 }
+  ];
+
+  function init() {
+    w1 = []; b1 = []; w2 = []; b2 = [0];
+    for (var i = 0; i < HID; i++) {
+      w1.push([Math.random() * 2 - 1, Math.random() * 2 - 1]);
+      b1.push(Math.random() * 2 - 1);
+      w2.push(Math.random() * 2 - 1);
+    }
+    b2[0] = Math.random() * 2 - 1;
+    steps = 0;
+    lossHistory = [];
+  }
+
+  function sigmoid(z) { return 1 / (1 + Math.exp(-z)); }
+
+  function forward(x, y) {
+    var hid = [];
+    for (var i = 0; i < HID; i++) {
+      hid.push(Math.tanh(w1[i][0] * x + w1[i][1] * y + b1[i]));
+    }
+    var z = b2[0];
+    for (var j = 0; j < HID; j++) z += w2[j] * hid[j];
+    return { hid: hid, out: sigmoid(z) };
+  }
+
+  function trainStep() {
+    var gw1 = [], gb1 = [], gw2 = new Array(HID).fill(0);
+    var gb2 = 0;
+    var loss = 0;
+
+    for (var i = 0; i < HID; i++) {
+      gw1.push([0, 0]);
+      gb1.push(0);
+    }
+
+    for (var d = 0; d < DATA.length; d++) {
+      var p = DATA[d];
+      var f = forward(p.x, p.y);
+      var err = f.out - p.t;
+      loss += -0.5 * (p.t * Math.log(f.out + 1e-9) + (1 - p.t) * Math.log(1 - f.out + 1e-9));
+
+      var dz = err;
+      gb2 += dz;
+
+      for (var h = 0; h < HID; h++) {
+        gw2[h] += dz * f.hid[h];
+        var dh = dz * w2[h] * (1 - f.hid[h] * f.hid[h]);
+        gw1[h][0] += dh * p.x;
+        gw1[h][1] += dh * p.y;
+        gb1[h] += dh;
+      }
+    }
+
+    for (var k = 0; k < HID; k++) {
+      w2[k] -= lr * gw2[k] / DATA.length;
+      w1[k][0] -= lr * gw1[k][0] / DATA.length;
+      w1[k][1] -= lr * gw1[k][1] / DATA.length;
+      b1[k] -= lr * gb1[k] / DATA.length;
+    }
+    b2[0] -= lr * gb2 / DATA.length;
+
+    steps++;
+    return loss / DATA.length;
+  }
+
+  function draw() {
+    ctx.fillStyle = "#03050a";
+    ctx.fillRect(0, 0, W, H);
+
+    var plotW = H, plotH = H;
+    var cell = 8;
+
+    // 背景の確率場
+    for (var py = 0; py < H; py += cell) {
+      for (var px = 0; px < W - 260; px += cell) {
+        var nx = (px / (W - 260)) * 3 - 1.5;
+        var ny = -((py / H) * 3 - 1.5);
+        var p = forward(nx, ny).out;
+        var hue = 160 - p * 160;
+        ctx.fillStyle = "hsla(" + hue + ",70%," + (10 + p * 45) + "%,0.85)";
+        ctx.fillRect(px, py, cell, cell);
+      }
+    }
+
+    // データ点
+    var hit = 0;
+    for (var i = 0; i < DATA.length; i++) {
+      var d = DATA[i];
+      var sx = (d.x + 1.5) / 3 * (W - 260);
+      var sy = (1.5 - d.y) / 3 * H;
+      var pr = forward(d.x, d.y).out;
+      var ok = (pr >= 0.5 ? 1 : 0) === d.t;
+      if (ok) hit++;
+
+      ctx.beginPath();
+      ctx.arc(sx, sy, 9, 0, 6.283);
+      ctx.fillStyle = d.t === 1 ? "#6ee7b7" : "#f9a8d4";
+      ctx.fill();
+      ctx.strokeStyle = ok ? "rgba(255,255,255,.85)" : "rgba(248,113,113,.95)";
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
+
+    // 損失グラフ
+    var gx = W - 240, gy = 30, gw = 200, gh = 160;
+    ctx.strokeStyle = "rgba(233,239,248,.15)";
+    ctx.strokeRect(gx, gy, gw, gh);
+
+    if (lossHistory.length > 1) {
+      ctx.strokeStyle = "#6ee7b7";
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      for (var l = 0; l < lossHistory.length; l++) {
+        var lx = gx + (l / Math.max(1, lossHistory.length - 1)) * gw;
+        var ly = gy + gh - Math.min(1, lossHistory[l]) * gh;
+        if (l === 0) ctx.moveTo(lx, ly); else ctx.lineTo(lx, ly);
+      }
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = "rgba(233,239,248,.6)";
+    ctx.font = '700 11px "Hiragino Sans","Yu Gothic",system-ui,sans-serif';
+    ctx.fillText("損失（下がれば学習中）", gx, gy - 10);
+    ctx.fillText("背景が P(1)", 20, 26);
+
+    // ネットワーク図
+    var nx0 = W - 110, ny0 = 260;
+    ctx.fillStyle = "rgba(233,239,248,.55)";
+    ctx.fillText("ネットワーク", gx, ny0 - 30);
+
+    for (var h2 = 0; h2 < HID; h2++) {
+      var hy = ny0 + h2 * 26;
+      ctx.strokeStyle = "rgba(110,231,183,.25)";
+      ctx.beginPath();
+      ctx.moveTo(gx + 10, ny0 + 10);
+      ctx.lineTo(gx + 60, hy);
+      ctx.stroke();
+      ctx.fillStyle = "rgba(110,231,183,.85)";
+      ctx.beginPath();
+      ctx.arc(gx + 60, hy, 5, 0, 6.283);
+      ctx.fill();
+    }
+    ctx.fillStyle = "rgba(249,168,212,.9)";
+    ctx.beginPath();
+    ctx.arc(gx + 10, ny0 + 10, 6, 0, 6.283);
+    ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,.9)";
+    ctx.beginPath();
+    ctx.arc(gx + 120, ny0 + (HID - 1) * 13, 6, 0, 6.283);
+    ctx.fill();
+
+    lossEl.textContent = (lossHistory.length ? lossHistory[lossHistory.length - 1] : 0).toFixed(3);
+    hitEl.textContent = hit + "/4";
+    stepsEl.textContent = String(steps);
+  }
+
+  var frames = 0, fpsTimer = 0, smooth = 0;
+  function loop(now) {
+    if (!fpsTimer) fpsTimer = now;
+    var t0 = performance.now();
+
+    var loss = 0;
+    for (var s = 0; s < 6; s++) loss = trainStep();
+    lossHistory.push(loss);
+    if (lossHistory.length > 200) lossHistory.shift();
+
+    draw();
+    smooth = smooth * 0.9 + (performance.now() - t0) * 0.1;
+
+    msEl.textContent = smooth.toFixed(1) + " ms";
+    frames++;
+    if (now - fpsTimer > 500) {
+      fpsEl.textContent = String(Math.round(frames * 1000 / (now - fpsTimer)));
+      frames = 0;
+      fpsTimer = now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  lrEl.addEventListener("input", function () { lr = Number(lrEl.value); lrVal.textContent = lr.toFixed(2); });
+  hidEl.addEventListener("input", function () {
+    HID = Number(hidEl.value);
+    hidVal.textContent = String(HID);
+    init();
+  });
+  document.getElementById("reset").addEventListener("click", init);
+
+  init();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
